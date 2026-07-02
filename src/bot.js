@@ -127,7 +127,7 @@ export function createBot(token, webAppUrl, appShortName) {
     activeEmployees.forEach((emp) => {
       const name = `${emp.first_name} ${emp.last_name || ''}`.trim();
       const timeStr = emp.last_event_at ? formatTime(emp.last_event_at) : '';
-      
+
       if (emp.status === 'in_office') {
         text += `🟢 <b>${escapeHtml(name)}</b> (в офісі з ${timeStr})\n`;
       } else if (emp.status === 'field_trip') {
@@ -139,24 +139,24 @@ export function createBot(token, webAppUrl, appShortName) {
   }
 
   // Quick Action Commands (English & Ukrainian aliases)
-  
+
   // 1. Check-in (Я на місці)
-  bot.command(['in', 'checkin', 'tut', 'priyshov', 'прийшов', 'тут', 'офіс'], (ctx) =>
+  bot.command(['in', 'checkin', 'office'], (ctx) =>
     handleQuickAction(ctx, 'checkin', '🟢 На місці:', 'прихід')
   );
 
   // 2. Out on a trip (Виїзд по місту)
-  bot.command(['away', 'trip', 'viizd', 'poihav', 'виїзд', 'виїхав', 'поїхав'], (ctx) =>
+  bot.command(['away', 'trip'], (ctx) =>
     handleQuickAction(ctx, 'field_start', '🚗 Виїхав:', 'виїзд')
   );
 
   // 3. Return from trip (Повернувся з виїзду)
-  bot.command(['back', 'return', 'povernuvsya', 'ofis', 'повернувся', 'назад'], (ctx) =>
+  bot.command(['back', 'return'], (ctx) =>
     handleQuickAction(ctx, 'field_end', '↩️ Повернувся в офіс:', 'повернення')
   );
 
   // 4. Check-out (Пішов додому)
-  bot.command(['out', 'checkout', 'dodomu', 'pishov', 'пішов', 'додому', 'пока'], (ctx) =>
+  bot.command(['out', 'checkout', 'home'], (ctx) =>
     handleQuickAction(ctx, 'checkout', '🏠 Пішов додому:', 'вихід')
   );
 
