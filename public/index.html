@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HR Tracker</title>
+  <meta name="description" content="Система контролю присутності співробітників">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    
+    <!-- ========================================================
+         EMPLOYEE VIEW
+         ======================================================== -->
+    <div id="employeeView" class="view-container">
+      <!-- Header -->
+      <header>
+        <div class="greeting">
+          <span class="wave">👋</span>
+          <h1 id="empName">Завантаження...</h1>
+        </div>
+        <div class="date-badge" id="empDate"></div>
+      </header>
+
+      <!-- Current Status Indicator -->
+      <div id="empStatusBadge" class="status-badge" data-status="offline">
+        <div class="status-dot"></div>
+        <span class="status-text" id="empStatusText">Завантаження...</span>
+      </div>
+
+      <!-- Action Buttons -->
+      <section class="actions">
+        <button id="btnCheckin" class="action-btn checkin-btn" disabled>
+          <div class="btn-icon">🏢</div>
+          <div class="btn-content">
+            <span class="btn-title">Я НА МІСЦІ</span>
+            <span class="btn-subtitle">Зареєструвати прихід</span>
+          </div>
+          <div class="btn-glow"></div>
+        </button>
+
+        <button id="btnFieldStart" class="action-btn field-btn" disabled>
+          <div class="btn-icon">🚗</div>
+          <div class="btn-content">
+            <span class="btn-title">ВИЇЗД</span>
+            <span class="btn-subtitle">Їду по справах</span>
+          </div>
+          <div class="btn-glow"></div>
+        </button>
+
+        <button id="btnFieldEnd" class="action-btn return-btn" disabled>
+          <div class="btn-icon">↩️</div>
+          <div class="btn-content">
+            <span class="btn-title">ПОВЕРНУВСЯ</span>
+            <span class="btn-subtitle">Назад в офіс</span>
+          </div>
+          <div class="btn-glow"></div>
+        </button>
+
+        <button id="btnCheckout" class="action-btn checkout-btn" disabled>
+          <div class="btn-icon">🏠</div>
+          <div class="btn-content">
+            <span class="btn-title">ЙДУ ДОДОМУ</span>
+            <span class="btn-subtitle">Завершити день</span>
+          </div>
+          <div class="btn-glow"></div>
+        </button>
+      </section>
+
+      <!-- Timeline -->
+      <section class="timeline-section">
+        <h2 class="timeline-title">📅 Сьогодні</h2>
+        <div id="timeline" class="timeline">
+          <div class="timeline-empty">Подій ще немає</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ========================================================
+         DASHBOARD VIEW
+         ======================================================== -->
+    <div id="dashboardView" class="view-container">
+      <!-- Header -->
+      <header>
+        <h1 class="page-title">📊 Панель контролю</h1>
+        <div class="header-meta">
+          <span class="date-text" id="dashDate"></span>
+          <div class="refresh-indicator" title="Автооновлення">
+            <div class="refresh-dot"></div>
+            <span>live</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Summary Cards -->
+      <section class="summary-cards">
+        <div class="summary-card card-office">
+          <div class="card-number" id="countOffice">0</div>
+          <div class="card-label">В офісі</div>
+          <div class="card-icon">🏢</div>
+        </div>
+        <div class="summary-card card-field">
+          <div class="card-number" id="countField">0</div>
+          <div class="card-label">На виїзді</div>
+          <div class="card-icon">🚗</div>
+        </div>
+        <div class="summary-card card-offline">
+          <div class="card-number" id="countOffline">0</div>
+          <div class="card-label">Не на роботі</div>
+          <div class="card-icon">🏠</div>
+        </div>
+      </section>
+
+      <!-- Employee List -->
+      <section class="employee-list" id="employeeList">
+        <!-- Populated by JS -->
+      </section>
+
+      <!-- Empty State -->
+      <div class="empty-state" id="emptyState" style="display: none">
+        <div class="empty-icon">👥</div>
+        <p>Ще ніхто не зареєструвався</p>
+        <span class="empty-hint">Працівники з'являться тут після першої дії в боті</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Employee Detail Modal (for Dashboard) -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-name" id="modalName"></h2>
+        <button class="modal-close" id="modalClose" aria-label="Закрити">✕</button>
+      </div>
+      <div class="modal-status" id="modalStatus"></div>
+      <div class="modal-timeline" id="modalTimeline"></div>
+    </div>
+  </div>
+
+  <!-- Common Loading Overlay -->
+  <div id="loading" class="loading-overlay active">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <!-- Common Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
