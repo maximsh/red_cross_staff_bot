@@ -299,6 +299,63 @@ async def handle_channel_post(channel_post: Message, bot: Bot):
         )
         await channel_post.reply("📊 Панель контролю команди:", reply_markup=keyboard)
 
+# AI-powered group chat message handler
+
+@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text, ~F.text.startswith("/"))
+async def handle_group_text(message: Message):
+    """
+    Analyze free-text messages in group chats using AI (Google Gemini)
+    to detect status change intents and automatically update employee status.
+    """
+    user = message.from_user
+    if not user or not message.text:
+        return
+
+    from src.nlp import analyze_message, format_note, GEMINI_API_KEY
+    if not GEMINI_API_KEY:
+        return  # AI analysis disabled — no API key configured
+
+    from src.database import get_current_status, get_valid_actions, record_event
+
+    # Get current status
+    current_status = get_current_status(user.id)
+    status = current_status.get("status") if current_status else "offline"
+
+    # Send message to AI for analysis
+    result = await analyze_message(message.text, status)
+    if not result:
+        return  # Not a status-related message — ignore silently
+
+    action = result["action"]
+    valid_actions = get_valid_actions(status)
+
+    if action not in valid_actions:
+        return  # Action not valid for current status — ignore silently
+
+    # Build note from extracted destination and duration
+    note = format_note(result.get("destination"), result.get("duration"))
+
+    # Record the event
+    record_event(user.id, action, note)
+
+    # Format confirmation
+    kyiv_time = datetime.now(timezone.utc) + timedelta(hours=3)
+    time_str = kyiv_time.strftime("%H:%M")
+    display_name = f"{user.first_name} {user.last_name or ''}".strip()
+
+    action_messages = {
+        "checkin": "🟢 На місці:",
+        "checkout": "🏠 Пішов додому:",
+        "field_start": "🚗 Виїхав:",
+        "field_end": "↩️ Повернувся в офіс:",
+    }
+
+    msg = f"{action_messages.get(action, '📌')} <b>{escape_html(display_name)}</b> о <b>{time_str}</b>"
+    if note:
+        msg += f"\n{note}"
+
+    await message.reply(msg, parse_mode="HTML")
+
 # Fallback handler for private text messages
 
 @dp.message(F.chat.type == "private", F.text)
