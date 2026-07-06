@@ -31,11 +31,11 @@
 
 ## 🛠 Технологічний стек
 
-* **Backend**: Node.js (Express) + ES Modules.
-* **Bot Engine**: grammY (TypeScript-first Telegram framework).
-* **Database**: SQLite (`better-sqlite3` з активованим режимом WAL для швидкодії).
+* **Backend**: Python (FastAPI + Uvicorn).
+* **Bot Engine**: aiogram v3 (сучасний асинхронний фреймворк для Telegram-ботів).
+* **Database**: SQLite (`sqlite3` з активованим режимом WAL та потокобезпечним блокуванням).
 * **Frontend**: Vanilla HTML5 + CSS3 + JS (SPA — Single Page Application).
-* **Mini App SDK**: `@telegram-apps/sdk-react` (офіційний скрипт валідації та роботи з клієнтом).
+* **Mini App SDK**: `@telegram-apps/sdk` (офіційний скрипт валідації та роботи з клієнтом).
 * **Security**: Валідація `initData` на бекенді через HMAC-SHA256 (захист від підміни Telegram ID).
 
 ---
@@ -44,22 +44,21 @@
 
 ```
 HR/
-├── database/
-│   └── schema.sql           # Схема таблиць бази даних
 ├── public/
 │   ├── index.html           # Головна сторінка SPA (Employee + Dashboard)
 │   ├── style.css            # Стилі з підтримкою темних тем та анімацій
 │   └── app.js               # Клієнтська логіка та роутинг
 ├── src/
-│   ├── server.js            # Запуск сервера Express + Telegram Bot
-│   ├── bot.js               # Логіка команд та клавіатур бота
-│   ├── api.js               # Ендпоінти REST API
-│   ├── database.js          # Операції з SQLite (транзакції)
-│   └── auth.js              # Валідація Telegram-сесій
+│   ├── server.py            # Запуск сервера FastAPI + Telegram Bot
+│   ├── bot.py               # Логіка команд та клавіатур бота (aiogram)
+│   ├── api.py               # Ендпоінти REST API (FastAPI)
+│   ├── database.py          # Операції з SQLite
+│   └── auth.py              # Валідація Telegram-сесій
 ├── data/
 │   └── hr.db                # База даних SQLite (створюється автоматично)
 ├── .env                     # Конфігурація (ігнорується git)
-├── package.json
+├── requirements.txt         # Залежності Python
+├── package.json             # npm-скрипти для зручності запуску
 └── README.md
 ```
 
@@ -67,10 +66,18 @@ HR/
 
 ## 🔧 Встановлення та запуск (локально)
 
-### 1. Клонування та встановлення залежностей
+### 1. Створення віртуального оточення та встановлення залежностей
 ```bash
 cd /Users/max/Work/HR
-npm install
+
+# Створення віртуального оточення
+python3 -m venv venv
+
+# Активація (для macOS/Linux)
+source venv/bin/activate
+
+# Встановлення залежностей
+pip install -r requirements.txt
 ```
 
 ### 2. Налаштування `.env`
@@ -85,15 +92,20 @@ PORT=3000
 ### 3. Локальний запуск із тунелем ngrok
 Для роботи Mini App у Telegram обов'язково потрібен HTTPS.
 
-1. Запустіть локальний сервер:
-   ```bash
-   npm run dev
-   ```
+1. Запустіть локальний сервер. Це можна зробити двома способами:
+   * **Через Python безпосередньо**:
+     ```bash
+     ./venv/bin/python -u -m src.server
+     ```
+   * **Через npm-скрипт**:
+     ```bash
+     npm run dev
+     ```
 2. В іншому вікні терміналу запустіть тунель ngrok:
    ```bash
    ngrok http 3000
    ```
-3. Скопіюйте отриманий `https://...` URL від ngrok та вставте його у змінну `WEBAPP_URL` у файлі `.env`. Перезапустіть Node.js сервер.
+3. Скопіюйте отриманий `https://...` URL від ngrok та вставте його у змінну `WEBAPP_URL` у файлі `.env`. Перезапустіть сервер.
 
 ---
 
