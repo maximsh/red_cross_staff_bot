@@ -16,6 +16,7 @@ from src.database import (
 
 # Load configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
 auth = get_auth_dependency(BOT_TOKEN)
 
 router = APIRouter()
@@ -163,7 +164,9 @@ async def get_my_status(user: dict = Depends(auth)):
             "last_event_at": None,
         }
 
-        return {**res_data, "validActions": valid_actions, "todayEvents": today_events}
+        is_admin = user_id in ADMIN_IDS
+
+        return {**res_data, "validActions": valid_actions, "todayEvents": today_events, "isAdmin": is_admin}
     except Exception as e:
         print("My status error:", e)
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
@@ -182,6 +185,7 @@ async def get_statuses(user: dict = Depends(auth)):
             "field_trip": field_trip_count,
             "offline": offline_count,
             "total": len(statuses),
+            "isAdmin": user["id"] in ADMIN_IDS
         }
 
         return {"employees": statuses, "summary": summary}
@@ -196,4 +200,40 @@ async def get_today_events_by_id(telegramId: int, user: dict = Depends(auth)):
         return {"events": events}
     except Exception as e:
         print("Today events error:", e)
+        return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
+class AdminSetStatusRequest(BaseModel):
+    telegram_id: int
+    action: str
+    note: Optional[str] = "Змінено адміністратором"
+
+@router.post("/api/admin/set-status")
+async def admin_set_status(payload: AdminSetStatusRequest, user: dict = Depends(auth)):
+    try:
+        if user["id"] not in ADMIN_IDS:
+            return JSONResponse(status_code=403, content={"error": "У вас немає прав адміністратора"})
+
+        target_id = payload.telegram_id
+        action = payload.action
+
+        current_status = get_current_status(target_id)
+        if not current_status:
+            return JSONResponse(status_code=404, content={"error": "Працівника не знайдено"})
+
+        status_name = current_status["status"]
+        valid_actions = get_valid_actions(status_name)
+
+        if action not in valid_actions:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": f"Не можна виконати дію '{action}' у поточному стані",
+                    "currentStatus": status_name,
+                },
+            )
+
+        result = record_event(target_id, action, payload.note)
+        return {"success": True, **result}
+    except Exception as e:
+        print("Admin set status error:", e)
         return JSONResponse(status_code=500, content={"error": "Internal server error"})

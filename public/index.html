@@ -139,6 +139,15 @@
         <button class="modal-close" id="modalClose" aria-label="Закрити">✕</button>
       </div>
       <div class="modal-status" id="modalStatus"></div>
+      <div class="modal-admin-actions" id="modalAdminActions" style="display: none;">
+        <h3 class="admin-actions-title">Дії адміністратора</h3>
+        <div class="admin-buttons">
+          <button class="admin-btn checkin-btn" data-action="checkin" disabled>Прихід 🏢</button>
+          <button class="admin-btn field-start-btn" data-action="field-start" disabled>Виїзд 🚗</button>
+          <button class="admin-btn field-end-btn" data-action="field-end" disabled>Повернення ↩️</button>
+          <button class="admin-btn checkout-btn" data-action="checkout" disabled>Вихід 🏠</button>
+        </div>
+      </div>
       <div class="modal-timeline" id="modalTimeline"></div>
     </div>
   </div>

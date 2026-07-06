@@ -563,6 +563,53 @@ body {
 .modal-status.field_trip { background: var(--color-warning-dim); color: var(--color-warning); border: 1px solid var(--color-warning-border); }
 .modal-status.offline { background: var(--color-neutral-dim); color: var(--color-neutral); border: 1px solid var(--color-neutral-border); }
 
+.modal-admin-actions {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.admin-actions-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tg-theme-hint-color);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.admin-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.admin-btn {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.admin-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.admin-btn:not(:disabled):active {
+  transform: scale(0.95);
+}
+.admin-btn.checkin-btn:not(:disabled) { border-color: rgba(0, 230, 118, 0.3); background: rgba(0, 230, 118, 0.1); color: var(--color-success); }
+.admin-btn.field-start-btn:not(:disabled) { border-color: rgba(255, 171, 0, 0.3); background: rgba(255, 171, 0, 0.1); color: var(--color-warning); }
+.admin-btn.field-end-btn:not(:disabled) { border-color: rgba(68, 138, 255, 0.3); background: rgba(68, 138, 255, 0.1); color: #448aff; }
+.admin-btn.checkout-btn:not(:disabled) { border-color: rgba(120, 144, 156, 0.3); background: rgba(120, 144, 156, 0.1); color: var(--color-neutral); }
+
 .modal-timeline { display: flex; flex-direction: column; }
 .modal-timeline-title { font-size: 13px; font-weight: 700; color: var(--tg-theme-hint-color); margin-bottom: 12px; }
 .modal-event { display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative; }

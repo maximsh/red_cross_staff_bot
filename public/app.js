@@ -9,6 +9,7 @@ let activeView = 'employee'; // 'employee' | 'dashboard'
 let initData = '';
 let currentStatus = 'offline';
 let refreshInterval = null;
+let isAdmin = false;
 
 // DOM elements
 const els = {
@@ -44,6 +45,8 @@ const els = {
   modalStatus: document.getElementById('modalStatus'),
   modalTimeline: document.getElementById('modalTimeline'),
   modalClose: document.getElementById('modalClose'),
+  modalAdminActions: document.getElementById('modalAdminActions'),
+  adminBtns: document.querySelectorAll('.admin-btn'),
 };
 
 // ===== Common API requests =====
@@ -268,6 +271,9 @@ function updateDashboardTime() {
 async function loadDashboardData(silent = false) {
   try {
     const data = await apiRequest('GET', '/api/statuses');
+    
+    // Update admin status
+    isAdmin = data.summary.isAdmin;
 
     // Update numbers
     animateNumber(els.countOffice, data.summary.in_office);
@@ -377,6 +383,20 @@ async function openEmployeeDetail(telegramId) {
     els.modalStatus.textContent = statusLabels[statusData.status] || statusData.status;
     els.modalStatus.className = `modal-status ${statusData.status}`;
 
+    // Update admin actions UI
+    if (isAdmin) {
+      els.modalAdminActions.style.display = 'block';
+      const validActions = statusData.validActions || ['checkin'];
+      els.adminBtns.forEach(btn => {
+        const actionRaw = btn.getAttribute('data-action');
+        const apiAction = actionRaw.replace('-', '_');
+        btn.disabled = !validActions.includes(apiAction);
+        btn.onclick = () => sendAdminAction(telegramId, apiAction);
+      });
+    } else {
+      els.modalAdminActions.style.display = 'none';
+    }
+
     // Render timeline inside modal
     if (!eventsData.events || eventsData.events.length === 0) {
       els.modalTimeline.innerHTML = `
@@ -424,6 +444,47 @@ function showModal() {
 function closeModal() {
   els.modalOverlay.classList.remove('active');
   document.body.style.overflow = '';
+}
+
+async function sendAdminAction(telegramId, action) {
+  const btn = document.querySelector(`.admin-btn[data-action="${action.replace('_', '-')}"]`);
+  if (!btn || btn.disabled) return;
+
+  if (tg?.HapticFeedback) {
+    tg.HapticFeedback.impactOccurred('medium');
+  }
+
+  const originalText = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  try {
+    await apiRequest('POST', '/api/admin/set-status', {
+      telegram_id: telegramId,
+      action: action,
+      note: 'Змінено адміністратором'
+    });
+
+    showToast('Статус успішно змінено', 'success');
+    
+    // Refresh the modal content with the new state
+    await openEmployeeDetail(telegramId);
+    
+    // Refresh dashboard list silently
+    loadDashboardData(true);
+
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.notificationOccurred('success');
+    }
+  } catch (err) {
+    console.error(`Admin action ${action} failed:`, err);
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.notificationOccurred('error');
+    }
+    showToast(err.message || 'Помилка', 'error');
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
 }
 
 // ===== Helper Functions =====
