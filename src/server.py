@@ -32,8 +32,11 @@ async def lifespan(app: FastAPI):
     print("✅ Database ready")
 
     # Start Telegram bot (polling) in the background
+    # handle_signals=False — let uvicorn handle SIGINT/SIGTERM instead of aiogram
     print("🤖 Starting Telegram bot...")
-    polling_task = asyncio.create_task(dp.start_polling(bot))
+    polling_task = asyncio.create_task(
+        dp.start_polling(bot, handle_signals=False)
+    )
 
     try:
         bot_info = await bot.get_me()
@@ -45,6 +48,7 @@ async def lifespan(app: FastAPI):
 
     # Graceful shutdown
     print("\n🛑 Shutting down...")
+    await dp.stop_polling()
     polling_task.cancel()
     try:
         await polling_task
