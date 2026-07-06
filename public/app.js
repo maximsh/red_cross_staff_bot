@@ -318,12 +318,15 @@ async function loadDashboardData(silent = false) {
                 offline: timeStr ? `пішов ${timeStr}` : '',
               };
 
+              const noteHtml = emp.note ? `<div class="employee-note">${escapeHtml(emp.note)}</div>` : '';
+
               return `
                 <div class="employee-card" data-id="${emp.telegram_id}" data-status="${status}" style="animation: slideIn 0.3s ease-out ${i * 0.04}s both">
                   <div class="employee-avatar">${initials}</div>
                   <div class="employee-info">
                     <div class="employee-name">${escapeHtml(emp.first_name)} ${escapeHtml(emp.last_name || '')}</div>
                     <div class="employee-detail">${statusLabels[status]}</div>
+                    ${noteHtml}
                   </div>
                   <div class="employee-status-icon">●</div>
                 </div>

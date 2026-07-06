@@ -141,9 +141,14 @@ def build_active_status_report() -> str:
         status = emp.get("status")
 
         if status == "in_office":
-            text += f"🟢 <b>{escape_html(name)}</b> (в офісі з {time_str})\n"
+            text += f"🟢 <b>{escape_html(name)}</b> (в офісі з {time_str})"
         elif status == "field_trip":
-            text += f"🟡 <b>{escape_html(name)}</b> (на виїзді з {time_str})\n"
+            text += f"🟡 <b>{escape_html(name)}</b> (на виїзді з {time_str})"
+
+        note = emp.get("note")
+        if note:
+            text += f" <i>[{escape_html(note)}]</i>"
+        text += "\n"
 
     return text
 
@@ -328,6 +333,7 @@ async def handle_group_text(message: Message):
 
     action = result["action"]
     valid_actions = get_valid_actions(status)
+    valid_actions.append("update")
 
     if action not in valid_actions:
         return  # Action not valid for current status — ignore silently
@@ -335,8 +341,19 @@ async def handle_group_text(message: Message):
     # Build note from extracted destination and duration
     note = format_note(result.get("destination"), result.get("duration"))
 
+    event_type = action
+    if action == "update":
+        if status == "offline":
+            event_type = "checkout"
+        elif status == "in_office":
+            event_type = "checkin"
+        elif status == "field_trip":
+            event_type = "field_start"
+        else:
+            event_type = "checkin"
+
     # Record the event
-    record_event(user.id, action, note)
+    record_event(user.id, event_type, note)
 
     # Format confirmation
     kyiv_time = datetime.now(timezone.utc) + timedelta(hours=3)
@@ -348,6 +365,7 @@ async def handle_group_text(message: Message):
         "checkout": "🏠 Пішов додому:",
         "field_start": "🚗 Виїхав:",
         "field_end": "↩️ Повернувся в офіс:",
+        "update": "ℹ️ Оновлено статус:",
     }
 
     msg = f"{action_messages.get(action, '📌')} <b>{escape_html(display_name)}</b> о <b>{time_str}</b>"

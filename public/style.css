@@ -687,3 +687,13 @@ body {
   -webkit-text-fill-color: transparent;
   animation: shimmer 1.5s infinite;
 }
+
+.employee-note {
+  font-size: 12px;
+  color: var(--tg-theme-text-color);
+  margin-top: 4px;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

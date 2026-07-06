@@ -126,7 +126,8 @@ def get_current_status(telegram_id: int):
             cur.execute("""
                 SELECT e.telegram_id, e.first_name, e.last_name, e.username,
                        COALESCE(cs.status, 'offline') as status,
-                       cs.last_event_at
+                       cs.last_event_at,
+                       (SELECT note FROM events ev WHERE ev.telegram_id = e.telegram_id ORDER BY ev.created_at DESC LIMIT 1) as note
                 FROM employees e
                 LEFT JOIN current_status cs ON e.telegram_id = cs.telegram_id
                 WHERE e.telegram_id = ?
@@ -146,7 +147,8 @@ def get_all_statuses():
             cur.execute("""
                 SELECT e.telegram_id, e.first_name, e.last_name, e.username,
                        COALESCE(cs.status, 'offline') as status,
-                       cs.last_event_at
+                       cs.last_event_at,
+                       (SELECT note FROM events ev WHERE ev.telegram_id = e.telegram_id ORDER BY ev.created_at DESC LIMIT 1) as note
                 FROM employees e
                 LEFT JOIN current_status cs ON e.telegram_id = cs.telegram_id
                 ORDER BY

@@ -29,12 +29,13 @@ SYSTEM_PROMPT = """Ти — асистент HR-системи контролю 
 - "checkout" — працівник йде додому / закінчує зміну / їде з роботи
 - "field_start" — працівник виїжджає кудись у справах (на склад, до клієнта, в податкову, тощо)
 - "field_end" — працівник повернувся з виїзду / повернувся в офіс
+- "update" — працівник затримується або повідомляє про зміну планів без зміни статусу (наприклад, "буду пізніше", "запізнююсь на 20 хв", "ще на годину")
 
 Поточний статус працівника: "{current_status}"
 Допустимі переходи:
-- З "offline" → можна: checkin, field_start
-- З "in_office" → можна: checkout, field_start
-- З "field_trip" → можна: field_end, checkout
+- З "offline" → можна: checkin, field_start, update
+- З "in_office" → можна: checkout, field_start, update
+- З "field_trip" → можна: field_end, checkout, update
 
 Правила:
 1. Якщо повідомлення НЕ пов'язане зі зміною робочого статусу (привітання, питання, обговорення, їжа, тощо) — поверни ТІЛЬКИ: {{"action": null}}
@@ -43,7 +44,7 @@ SYSTEM_PROMPT = """Ти — асистент HR-системи контролю 
 4. Розумій повідомлення з помилками, скороченнями та сленгом.
 
 Відповідай ТІЛЬКИ валідним JSON у форматі:
-{{"action": "field_start"|"field_end"|"checkin"|"checkout"|null, "destination": "назва місця або null", "duration": "тривалість або null"}}
+{{"action": "field_start"|"field_end"|"checkin"|"checkout"|"update"|null, "destination": "назва місця або null", "duration": "тривалість або null"}}
 
 Приклади:
 Повідомлення: "Поїхав на склад на 30 хвилин" → {{"action": "field_start", "destination": "склад", "duration": "30 хвилин"}}
@@ -51,6 +52,8 @@ SYSTEM_PROMPT = """Ти — асистент HR-системи контролю 
 Повідомлення: "Повернувся" → {{"action": "field_end", "destination": null, "duration": null}}
 Повідомлення: "Я на місці" → {{"action": "checkin", "destination": null, "duration": null}}
 Повідомлення: "Все, їду додому" → {{"action": "checkout", "destination": null, "duration": null}}
+Повідомлення: "Запізнююсь на 20 хвилин" → {{"action": "update", "destination": null, "duration": "20 хвилин"}}
+Повідомлення: "Буду о 12" → {{"action": "update", "destination": null, "duration": "до 12:00"}}
 Повідомлення: "Привіт, як справи?" → {{"action": null}}
 Повідомлення: "Хто буде обідати?" → {{"action": null}}
 Повідомлення: "Я обідаю" → {{"action": null}}
@@ -101,7 +104,7 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
 
         # Validate response structure
         action = result.get("action")
-        if not action or action not in ("checkin", "checkout", "field_start", "field_end"):
+        if not action or action not in ("checkin", "checkout", "field_start", "field_end", "update"):
             return None
 
         return {
