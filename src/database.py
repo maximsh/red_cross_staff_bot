@@ -194,8 +194,8 @@ def get_valid_actions(status: str):
     if status == 'offline':
         return ['checkin', 'field_start']
     elif status == 'in_office':
-        return ['checkout', 'field_start']
+        return ['checkout', 'field_start', 'checkin']
     elif status == 'field_trip':
-        return ['field_end', 'checkout']
+        return ['field_end', 'checkout', 'checkin']
     else:
         return ['checkin', 'field_start']
