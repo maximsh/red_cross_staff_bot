@@ -332,33 +332,75 @@ async def handle_group_text(message: Message):
         return  # Not a status-related message — ignore silently
 
     action = result["action"]
-    valid_actions = get_valid_actions(status)
-    valid_actions.append("update")
+    includes_sender = result.get("includes_sender", True)
+    mentioned_users = result.get("mentioned_users", [])
 
-    if action not in valid_actions:
-        return  # Action not valid for current status — ignore silently
+    from src.database import get_all_statuses, upsert_employee
+    all_employees = get_all_statuses()
+
+    target_users = []
+
+    if includes_sender:
+        target_users.append({
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name or "",
+            "status": status,
+        })
+
+    if mentioned_users:
+        for emp in all_employees:
+            emp_first = emp.get("first_name", "").lower()
+            emp_last = (emp.get("last_name") or "").lower()
+            emp_username = (emp.get("username") or "").lower()
+
+            for mention in mentioned_users:
+                m_lower = mention.lower()
+                # Use length > 2 to avoid matching very short fragments if Gemini returned something weird
+                if len(m_lower) > 2 and (m_lower in emp_first or m_lower in emp_last or m_lower in emp_username):
+                    if emp["telegram_id"] not in [u["id"] for u in target_users]:
+                        target_users.append({
+                            "id": emp["telegram_id"],
+                            "first_name": emp["first_name"],
+                            "last_name": emp["last_name"] or "",
+                            "status": emp["status"],
+                        })
+                    break
+
+    if not target_users:
+        return
 
     # Build note from extracted destination and duration
     note = format_note(result.get("destination"), result.get("duration"))
 
-    event_type = action
-    if action == "update":
-        if status == "offline":
-            event_type = "checkout"
-        elif status == "in_office":
-            event_type = "checkin"
-        elif status == "field_trip":
-            event_type = "field_start"
-        else:
-            event_type = "checkin"
+    updates = []
 
-    # Record the event
-    record_event(user.id, event_type, note)
+    for t_user in target_users:
+        event_type = action
+        if action == "update":
+            if t_user["status"] == "offline":
+                event_type = "checkout"
+            elif t_user["status"] == "in_office":
+                event_type = "checkin"
+            elif t_user["status"] == "field_trip":
+                event_type = "field_start"
+            else:
+                event_type = "checkin"
+
+        # Record the event for each user
+        try:
+            record_event(t_user["id"], event_type, note)
+            display_name = f"{t_user['first_name']} {t_user['last_name']}".strip()
+            updates.append(escape_html(display_name))
+        except Exception as e:
+            print(f"Failed to record event for {t_user['id']}: {e}")
+
+    if not updates:
+        return
 
     # Format confirmation
     kyiv_time = datetime.now(timezone.utc) + timedelta(hours=3)
     time_str = kyiv_time.strftime("%H:%M")
-    display_name = f"{user.first_name} {user.last_name or ''}".strip()
 
     action_messages = {
         "checkin": "🟢 На місці:",
@@ -368,7 +410,7 @@ async def handle_group_text(message: Message):
         "update": "ℹ️ Оновлено статус:",
     }
 
-    msg = f"{action_messages.get(action, '📌')} <b>{escape_html(display_name)}</b> о <b>{time_str}</b>"
+    msg = f"{action_messages.get(action, '📌')} <b>{', '.join(updates)}</b> о <b>{time_str}</b>"
     if note:
         msg += f"\n{note}"
 
