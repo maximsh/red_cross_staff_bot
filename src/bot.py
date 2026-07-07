@@ -334,6 +334,7 @@ async def handle_group_text(message: Message):
     action = result["action"]
     includes_sender = result.get("includes_sender", True)
     mentioned_users = result.get("mentioned_users", [])
+    is_plural = result.get("is_plural", False)
 
     from src.database import get_all_statuses, upsert_employee
     all_employees = get_all_statuses()
@@ -366,6 +367,36 @@ async def handle_group_text(message: Message):
                             "status": emp["status"],
                         })
                     break
+
+    if is_plural and not mentioned_users:
+        sender_note = current_status.get("note") if current_status else ""
+        sender_time_str = current_status.get("last_event_at") if current_status else None
+        
+        if sender_time_str:
+            try:
+                sender_time = datetime.fromisoformat(sender_time_str.replace("Z", "+00:00"))
+                for emp in all_employees:
+                    if emp["telegram_id"] == user.id:
+                        continue
+                    if emp["status"] != status:
+                        continue
+                    if sender_note and emp["note"] != sender_note:
+                        continue
+                        
+                    emp_time_str = emp.get("last_event_at")
+                    if emp_time_str:
+                        emp_time = datetime.fromisoformat(emp_time_str.replace("Z", "+00:00"))
+                        diff = abs((sender_time - emp_time).total_seconds())
+                        if diff < 120:  # 2 minutes window
+                            if emp["telegram_id"] not in [u["id"] for u in target_users]:
+                                target_users.append({
+                                    "id": emp["telegram_id"],
+                                    "first_name": emp["first_name"],
+                                    "last_name": emp["last_name"] or "",
+                                    "status": emp["status"],
+                                })
+            except Exception as e:
+                print("Error grouping users:", e)
 
     if not target_users:
         return

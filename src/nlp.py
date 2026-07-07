@@ -44,6 +44,7 @@ SYSTEM_PROMPT = """Ти — асистент HR-системи контролю 
 4. Зверни увагу на те, про кого йдеться:
    - Якщо вказані прізвища або імена людей (наприклад, "Лисенко Коваленко Бортко на жовтому в АТБ"), обов'язково додай їх у список `mentioned_users` (наприклад: ["Лисенко", "Коваленко", "Бортко"]).
    - Поле `includes_sender` має бути `true`, якщо дія стосується автора повідомлення (наприклад, "я на місці", "ми поїхали", "ми з Івановим"). Якщо повідомлення перелічує лише інших людей або всіх поіменно (включаючи автора в третій особі), `includes_sender` може бути `false`.
+   - Поле `is_plural` має бути `true`, якщо дія описана у множині ("повернулися", "ми приїхали", "їдемо"). Якщо в однині ("повернувся", "я поїхав", "на місці") — `false`.
 5. Зроби action = null тільки якщо це звичайна розмова. Якщо це звіт про переміщення, поверни відповідний action.
 
 Приклади:
@@ -107,6 +108,10 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
                 "type": "boolean",
                 "description": "Чи стосується дія самого автора повідомлення."
             },
+            "is_plural": {
+                "type": "boolean",
+                "description": "Чи дія описана у множині ('повернулися', 'ми приїхали'). Якщо в однині ('повернувся') — false."
+            },
             "mentioned_users": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -144,6 +149,7 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
             "destination": dest if dest and dest != "null" else None,
             "duration": dur if dur and dur != "null" else None,
             "includes_sender": result.get("includes_sender", True),
+            "is_plural": result.get("is_plural", False),
             "mentioned_users": result.get("mentioned_users", []),
         }
 
