@@ -131,10 +131,13 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
         if not action or action not in ("checkin", "checkout", "field_start", "field_end", "update"):
             return None
 
+        dest = result.get("destination")
+        dur = result.get("duration")
+
         return {
             "action": action,
-            "destination": result.get("destination") or None,
-            "duration": result.get("duration") or None,
+            "destination": dest if dest and dest != "null" else None,
+            "duration": dur if dur and dur != "null" else None,
         }
 
     except json.JSONDecodeError as e:
@@ -148,8 +151,8 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
 def format_note(destination: Optional[str], duration: Optional[str]) -> str:
     """Format destination and duration into a human-readable note string."""
     parts = []
-    if destination:
+    if destination and destination != "null":
         parts.append(f"📍 {destination}")
-    if duration:
+    if duration and duration != "null":
         parts.append(f"≈{duration}")
     return " ".join(parts) if parts else ""
