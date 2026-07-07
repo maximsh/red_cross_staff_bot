@@ -32,8 +32,9 @@ async def checkin(payload: Optional[EventRequest] = None, user: dict = Depends(a
         first_name = user["first_name"]
         last_name = user.get("last_name") or ""
         username = user.get("username") or ""
+        photo_url = user.get("photo_url") or ""
 
-        upsert_employee(user_id, first_name, last_name, username)
+        upsert_employee(user_id, first_name, last_name, username, photo_url)
 
         current_status = get_current_status(user_id)
         status_name = current_status["status"] if current_status else "offline"
@@ -147,8 +148,9 @@ async def get_my_status(user: dict = Depends(auth)):
         first_name = user["first_name"]
         last_name = user.get("last_name") or ""
         username = user.get("username") or ""
+        photo_url = user.get("photo_url") or ""
 
-        upsert_employee(user_id, first_name, last_name, username)
+        upsert_employee(user_id, first_name, last_name, username, photo_url)
 
         status_data = get_current_status(user_id)
         status_name = status_data["status"] if status_data else "offline"

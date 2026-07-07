@@ -26,6 +26,7 @@ def init_db():
               first_name TEXT NOT NULL,
               last_name TEXT DEFAULT '',
               username TEXT DEFAULT '',
+              photo_url TEXT DEFAULT '',
               created_at DATETIME DEFAULT (datetime('now'))
             );
 
@@ -48,22 +49,30 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_events_telegram_id ON events(telegram_id);
             CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
             """)
+            
+            # Add photo_url column if it doesn't exist
+            try:
+                conn.execute("ALTER TABLE employees ADD COLUMN photo_url TEXT DEFAULT '';")
+            except sqlite3.OperationalError:
+                pass
+
             conn.commit()
         finally:
             conn.close()
 
-def upsert_employee(telegram_id: int, first_name: str, last_name: str = '', username: str = ''):
+def upsert_employee(telegram_id: int, first_name: str, last_name: str = '', username: str = '', photo_url: str = ''):
     with db_lock:
         conn = get_db_connection()
         try:
             conn.execute("""
-                INSERT INTO employees (telegram_id, first_name, last_name, username)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO employees (telegram_id, first_name, last_name, username, photo_url)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(telegram_id) DO UPDATE SET
                   first_name = excluded.first_name,
                   last_name = excluded.last_name,
-                  username = excluded.username
-            """, (telegram_id, first_name, last_name or '', username or ''))
+                  username = excluded.username,
+                  photo_url = CASE WHEN excluded.photo_url != '' THEN excluded.photo_url ELSE employees.photo_url END
+            """, (telegram_id, first_name, last_name or '', username or '', photo_url or ''))
 
             # Ensure current_status row exists
             conn.execute("""
@@ -124,7 +133,7 @@ def get_current_status(telegram_id: int):
         try:
             cur = conn.cursor()
             cur.execute("""
-                SELECT e.telegram_id, e.first_name, e.last_name, e.username,
+                SELECT e.telegram_id, e.first_name, e.last_name, e.username, e.photo_url,
                        COALESCE(cs.status, 'offline') as status,
                        cs.last_event_at,
                        (SELECT note FROM events ev WHERE ev.telegram_id = e.telegram_id ORDER BY ev.created_at DESC LIMIT 1) as note
@@ -145,7 +154,7 @@ def get_all_statuses():
         try:
             cur = conn.cursor()
             cur.execute("""
-                SELECT e.telegram_id, e.first_name, e.last_name, e.username,
+                SELECT e.telegram_id, e.first_name, e.last_name, e.username, e.photo_url,
                        COALESCE(cs.status, 'offline') as status,
                        cs.last_event_at,
                        (SELECT note FROM events ev WHERE ev.telegram_id = e.telegram_id ORDER BY ev.created_at DESC LIMIT 1) as note

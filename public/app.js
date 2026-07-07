@@ -310,6 +310,9 @@ async function loadDashboardData(silent = false) {
           <div class="group-employees">
             ${group.employees.map((emp, i) => {
               const initials = getInitials(emp.first_name, emp.last_name);
+              const avatarHtml = emp.photo_url 
+                ? `<img src="${emp.photo_url}" class="employee-avatar-img" alt="${escapeHtml(emp.first_name)}" />`
+                : initials;
               const timeStr = emp.last_event_at ? formatTime(emp.last_event_at) : '';
               
               const statusLabels = {
@@ -322,7 +325,7 @@ async function loadDashboardData(silent = false) {
 
               return `
                 <div class="employee-card" data-id="${emp.telegram_id}" data-status="${status}" style="animation: slideIn 0.3s ease-out ${i * 0.04}s both">
-                  <div class="employee-avatar">${initials}</div>
+                  <div class="employee-avatar">${avatarHtml}</div>
                   <div class="employee-info">
                     <div class="employee-name">${escapeHtml(emp.first_name)} ${escapeHtml(emp.last_name || '')}</div>
                     <div class="employee-detail">${statusLabels[status]}</div>
