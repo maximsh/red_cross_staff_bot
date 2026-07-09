@@ -401,8 +401,8 @@ async def handle_group_text(message: Message):
     if not target_users:
         return
 
-    # Build note from extracted destination and duration
-    note = format_note(result.get("destination"), result.get("duration"))
+    # Build note from extracted destination, duration, and car info
+    note = format_note(result.get("destination"), result.get("duration"), result.get("car_info"))
 
     updates = []
 

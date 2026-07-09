@@ -161,11 +161,13 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
         return None
 
 
-def format_note(destination: Optional[str], duration: Optional[str]) -> str:
-    """Format destination and duration into a human-readable note string."""
+def format_note(destination: Optional[str], duration: Optional[str], car_info: Optional[str] = None) -> str:
+    """Format destination, duration, and car_info into a human-readable note string."""
     parts = []
     if destination and destination != "null":
         parts.append(f"📍 {destination}")
     if duration and duration != "null":
         parts.append(f"≈{duration}")
+    if car_info and car_info != "null":
+        parts.append(f"🚗 {car_info}")
     return " ".join(parts) if parts else ""
