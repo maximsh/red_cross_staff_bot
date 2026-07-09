@@ -147,6 +147,14 @@
           <button class="admin-btn field-end-btn" data-action="field-end" disabled>Повернення ↩️</button>
           <button class="admin-btn checkout-btn" data-action="checkout" disabled>Додому 🏠</button>
         </div>
+        
+        <div class="admin-aliases-section" style="margin-top: 15px;">
+          <h3 class="admin-actions-title" style="margin-bottom: 8px;">Аліаси (через кому)</h3>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="adminAliasesInput" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--tg-theme-hint-color, #8a8a9a); background: var(--tg-theme-bg-color, #1a1a2e); color: var(--tg-theme-text-color, #eaeaea); font-family: inherit; font-size: 14px;" placeholder="Саня, Олександр" />
+            <button id="adminSaveAliasesBtn" class="admin-btn save-aliases-btn" style="padding: 10px 15px; flex: none; background: rgba(108, 99, 255, 0.1); color: var(--tg-theme-button-color, #6c63ff);">Зберегти</button>
+          </div>
+        </div>
       </div>
       <div class="modal-timeline" id="modalTimeline"></div>
     </div>

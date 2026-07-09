@@ -355,23 +355,32 @@ async def handle_group_text(message: Message):
             emp_last = (emp.get("last_name") or "").lower()
             emp_username = (emp.get("username") or "").lower()
 
+            emp_aliases = [a.strip().lower() for a in (emp.get("aliases") or "").split(",") if a.strip()]
+
             for mention in mentioned_users:
                 m_lower = mention.lower()
                 # Use length > 2 to avoid matching very short fragments if Gemini returned something weird
-                if len(m_lower) > 2 and (m_lower in emp_first or m_lower in emp_last or m_lower in emp_username):
-                    if emp["telegram_id"] not in [u["id"] for u in target_users]:
-                        target_users.append({
-                            "id": emp["telegram_id"],
-                            "first_name": emp["first_name"],
-                            "last_name": emp["last_name"] or "",
-                            "status": emp["status"],
-                        })
-                    break
+                if len(m_lower) > 2:
+                    match = (m_lower in emp_first or m_lower in emp_last or m_lower in emp_username)
+                    if not match:
+                        for alias in emp_aliases:
+                            if m_lower in alias or alias in m_lower:
+                                match = True
+                                break
+                    if match:
+                        if emp["telegram_id"] not in [u["id"] for u in target_users]:
+                            target_users.append({
+                                "id": emp["telegram_id"],
+                                "first_name": emp["first_name"],
+                                "last_name": emp["last_name"] or "",
+                                "status": emp["status"],
+                            })
+                        break
 
     if is_plural and not mentioned_users:
         sender_note = current_status.get("note") if current_status else ""
         sender_time_str = current_status.get("last_event_at") if current_status else None
-        
+
         if sender_time_str:
             try:
                 sender_time = datetime.fromisoformat(sender_time_str.replace("Z", "+00:00"))
@@ -382,7 +391,7 @@ async def handle_group_text(message: Message):
                         continue
                     if sender_note and emp["note"] != sender_note:
                         continue
-                        
+
                     emp_time_str = emp.get("last_event_at")
                     if emp_time_str:
                         emp_time = datetime.fromisoformat(emp_time_str.replace("Z", "+00:00"))

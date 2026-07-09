@@ -12,6 +12,7 @@ from src.database import (
     get_all_statuses,
     get_today_events,
     get_valid_actions,
+    set_employee_aliases,
 )
 
 # Load configuration
@@ -238,4 +239,27 @@ async def admin_set_status(payload: AdminSetStatusRequest, user: dict = Depends(
         return {"success": True, **result}
     except Exception as e:
         print("Admin set status error:", e)
+        return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
+class AdminSetAliasesRequest(BaseModel):
+    telegram_id: int
+    aliases: str
+
+@router.post("/api/admin/set-aliases")
+async def admin_set_aliases(payload: AdminSetAliasesRequest, user: dict = Depends(auth)):
+    try:
+        if user["id"] not in ADMIN_IDS:
+            return JSONResponse(status_code=403, content={"error": "У вас немає прав адміністратора"})
+            
+        target_id = payload.telegram_id
+        aliases_str = payload.aliases
+        
+        current_status = get_current_status(target_id)
+        if not current_status:
+            return JSONResponse(status_code=404, content={"error": "Працівника не знайдено"})
+            
+        set_employee_aliases(target_id, aliases_str)
+        return {"success": True, "aliases": aliases_str}
+    except Exception as e:
+        print("Admin set aliases error:", e)
         return JSONResponse(status_code=500, content={"error": "Internal server error"})

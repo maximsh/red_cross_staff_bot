@@ -55,6 +55,12 @@ def init_db():
                 conn.execute("ALTER TABLE employees ADD COLUMN photo_url TEXT DEFAULT '';")
             except sqlite3.OperationalError:
                 pass
+            
+            # Add aliases column if it doesn't exist
+            try:
+                conn.execute("ALTER TABLE employees ADD COLUMN aliases TEXT DEFAULT '';")
+            except sqlite3.OperationalError:
+                pass
 
             conn.commit()
         finally:
@@ -79,6 +85,15 @@ def upsert_employee(telegram_id: int, first_name: str, last_name: str = '', user
                 INSERT OR IGNORE INTO current_status (telegram_id, status)
                 VALUES (?, 'offline')
             """, (telegram_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+def set_employee_aliases(telegram_id: int, aliases: str):
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            conn.execute("UPDATE employees SET aliases = ? WHERE telegram_id = ?", (aliases, telegram_id))
             conn.commit()
         finally:
             conn.close()
@@ -133,7 +148,7 @@ def get_current_status(telegram_id: int):
         try:
             cur = conn.cursor()
             cur.execute("""
-                SELECT e.telegram_id, e.first_name, e.last_name, e.username, e.photo_url,
+                SELECT e.telegram_id, e.first_name, e.last_name, e.username, e.photo_url, e.aliases,
                        COALESCE(cs.status, 'offline') as status,
                        cs.last_event_at,
                        (SELECT note FROM events ev WHERE ev.telegram_id = e.telegram_id ORDER BY ev.created_at DESC LIMIT 1) as note
@@ -154,7 +169,7 @@ def get_all_statuses():
         try:
             cur = conn.cursor()
             cur.execute("""
-                SELECT e.telegram_id, e.first_name, e.last_name, e.username, e.photo_url,
+                SELECT e.telegram_id, e.first_name, e.last_name, e.username, e.photo_url, e.aliases,
                        COALESCE(cs.status, 'offline') as status,
                        cs.last_event_at,
                        (SELECT note FROM events ev WHERE ev.telegram_id = e.telegram_id ORDER BY ev.created_at DESC LIMIT 1) as note

@@ -47,6 +47,8 @@ const els = {
   modalClose: document.getElementById('modalClose'),
   modalAdminActions: document.getElementById('modalAdminActions'),
   adminBtns: document.querySelectorAll('.admin-btn'),
+  adminAliasesInput: document.getElementById('adminAliasesInput'),
+  adminSaveAliasesBtn: document.getElementById('adminSaveAliasesBtn'),
 };
 
 // ===== Common API requests =====
@@ -251,6 +253,13 @@ function initDashboard() {
   els.modalOverlay.addEventListener('click', (e) => {
     if (e.target === els.modalOverlay) closeModal();
   });
+  
+  if (els.adminSaveAliasesBtn) {
+    els.adminSaveAliasesBtn.addEventListener('click', () => {
+      const targetId = parseInt(els.modalName.getAttribute('data-id'), 10);
+      if (targetId) sendAdminAliases(targetId, els.adminAliasesInput.value);
+    });
+  }
 
   // Load dashboard data
   loadDashboardData();
@@ -380,6 +389,7 @@ async function openEmployeeDetail(telegramId) {
 
     const name = `${statusData.first_name} ${statusData.last_name || ''}`.trim();
     els.modalName.textContent = name;
+    els.modalName.setAttribute('data-id', telegramId);
 
     const statusLabels = {
       in_office: '🟢 В офісі',
@@ -394,11 +404,15 @@ async function openEmployeeDetail(telegramId) {
       els.modalAdminActions.style.display = 'block';
       const validActions = statusData.validActions || ['checkin'];
       els.adminBtns.forEach(btn => {
+        if (!btn.hasAttribute('data-action')) return;
         const actionRaw = btn.getAttribute('data-action');
         const apiAction = actionRaw.replace('-', '_');
         btn.disabled = !validActions.includes(apiAction);
         btn.onclick = () => sendAdminAction(telegramId, apiAction);
       });
+      if (els.adminAliasesInput) {
+        els.adminAliasesInput.value = statusData.aliases || '';
+      }
     } else {
       els.modalAdminActions.style.display = 'none';
     }
@@ -488,6 +502,44 @@ async function sendAdminAction(telegramId, action) {
       tg.HapticFeedback.notificationOccurred('error');
     }
     showToast(err.message || 'Помилка', 'error');
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+}
+
+async function sendAdminAliases(telegramId, aliases) {
+  const btn = els.adminSaveAliasesBtn;
+  if (!btn || btn.disabled) return;
+
+  if (tg?.HapticFeedback) {
+    tg.HapticFeedback.impactOccurred('medium');
+  }
+
+  const originalText = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  try {
+    await apiRequest('POST', '/api/admin/set-aliases', {
+      telegram_id: telegramId,
+      aliases: aliases
+    });
+
+    showToast('Аліаси успішно збережено', 'success');
+    
+    // Refresh dashboard list silently
+    loadDashboardData(true);
+
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.notificationOccurred('success');
+    }
+  } catch (err) {
+    console.error(`Admin set aliases failed:`, err);
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.notificationOccurred('error');
+    }
+    showToast(err.message || 'Помилка', 'error');
+  } finally {
     btn.textContent = originalText;
     btn.disabled = false;
   }
