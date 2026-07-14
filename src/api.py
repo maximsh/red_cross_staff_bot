@@ -48,7 +48,7 @@ def transform_photo_url(employee: dict):
     return employee
 
 @router.get("/api/avatar/{telegram_id}")
-async def get_avatar(telegram_id: int):
+def get_avatar(telegram_id: int):
     local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{telegram_id}.jpg")
     
     if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
@@ -92,7 +92,7 @@ async def get_avatar(telegram_id: int):
     return Response(status_code=404)
 
 @router.post("/api/checkin")
-async def checkin(background_tasks: BackgroundTasks, payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
+def checkin(background_tasks: BackgroundTasks, payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
     try:
         user_id = user["id"]
         first_name = user["first_name"]
@@ -130,7 +130,7 @@ async def checkin(background_tasks: BackgroundTasks, payload: Optional[EventRequ
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.post("/api/checkout")
-async def checkout(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
+def checkout(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
     try:
         user_id = user["id"]
         current_status = get_current_status(user_id)
@@ -154,7 +154,7 @@ async def checkout(payload: Optional[EventRequest] = None, user: dict = Depends(
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.post("/api/field-start")
-async def field_start(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
+def field_start(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
     try:
         user_id = user["id"]
         current_status = get_current_status(user_id)
@@ -178,7 +178,7 @@ async def field_start(payload: Optional[EventRequest] = None, user: dict = Depen
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.post("/api/field-end")
-async def field_end(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
+def field_end(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
     try:
         user_id = user["id"]
         current_status = get_current_status(user_id)
@@ -202,7 +202,7 @@ async def field_end(payload: Optional[EventRequest] = None, user: dict = Depends
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.get("/api/status/{telegramId}")
-async def get_status_by_id(telegramId: int, user: dict = Depends(auth)):
+def get_status_by_id(telegramId: int, user: dict = Depends(auth)):
     try:
         status_data = get_current_status(telegramId)
         if not status_data:
@@ -216,7 +216,7 @@ async def get_status_by_id(telegramId: int, user: dict = Depends(auth)):
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.get("/api/my-status")
-async def get_my_status(background_tasks: BackgroundTasks, user: dict = Depends(auth)):
+def get_my_status(background_tasks: BackgroundTasks, user: dict = Depends(auth)):
     try:
         user_id = user["id"]
         first_name = user["first_name"]
@@ -256,7 +256,7 @@ async def get_my_status(background_tasks: BackgroundTasks, user: dict = Depends(
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.get("/api/statuses")
-async def get_statuses(user: dict = Depends(auth)):
+def get_statuses(user: dict = Depends(auth)):
     try:
         statuses = get_all_statuses()
         for s in statuses:
@@ -280,7 +280,7 @@ async def get_statuses(user: dict = Depends(auth)):
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.get("/api/today/{telegramId}")
-async def get_today_events_by_id(telegramId: int, user: dict = Depends(auth)):
+def get_today_events_by_id(telegramId: int, user: dict = Depends(auth)):
     try:
         events = get_today_events(telegramId)
         return {"events": events}
@@ -294,7 +294,7 @@ class AdminSetStatusRequest(BaseModel):
     note: Optional[str] = "Змінено адміністратором"
 
 @router.post("/api/admin/set-status")
-async def admin_set_status(payload: AdminSetStatusRequest, user: dict = Depends(auth)):
+def admin_set_status(payload: AdminSetStatusRequest, user: dict = Depends(auth)):
     try:
         if user["id"] not in ADMIN_IDS:
             return JSONResponse(status_code=403, content={"error": "У вас немає прав адміністратора"})
@@ -329,7 +329,7 @@ class AdminSetAliasesRequest(BaseModel):
     aliases: str
 
 @router.post("/api/admin/set-aliases")
-async def admin_set_aliases(payload: AdminSetAliasesRequest, user: dict = Depends(auth)):
+def admin_set_aliases(payload: AdminSetAliasesRequest, user: dict = Depends(auth)):
     try:
         if user["id"] not in ADMIN_IDS:
             return JSONResponse(status_code=403, content={"error": "У вас немає прав адміністратора"})
