@@ -1,10 +1,8 @@
 import os
 from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse, Response, RedirectResponse
-import urllib.request
-import hashlib
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 import json
 
 from src.auth import get_auth_dependency
@@ -29,85 +27,15 @@ router = APIRouter()
 class EventRequest(BaseModel):
     note: Optional[str] = ""
 
-def download_avatar_sync(user_id: int, photo_url: str):
-    local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{user_id}.jpg")
-    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-    try:
-        req = urllib.request.Request(photo_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            data = response.read()
-        with open(local_path, "wb") as f:
-            f.write(data)
-    except Exception as e:
-        print(f"Failed to download avatar for {user_id}:", e)
-
-def transform_photo_url(employee: dict):
-    if employee and employee.get("photo_url"):
-        url_hash = hashlib.md5(employee["photo_url"].encode()).hexdigest()[:8]
-        employee["photo_url"] = f"/api/avatar/{employee['telegram_id']}?v={url_hash}"
-    return employee
-
-@router.get("/api/avatar/{telegram_id}")
-def get_avatar(telegram_id: int):
-    local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{telegram_id}.jpg")
-    
-    if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
-        return FileResponse(local_path)
-        
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUserProfilePhotos?user_id={telegram_id}&limit=1"
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read())
-        
-        if data.get("ok") and data["result"]["total_count"] > 0:
-            photos = data["result"]["photos"][0]
-            file_id = photos[-1]["file_id"]
-            
-            file_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
-            req2 = urllib.request.Request(file_url)
-            with urllib.request.urlopen(req2) as response2:
-                data2 = json.loads(response2.read())
-                
-            if data2.get("ok"):
-                file_path = data2["result"]["file_path"]
-                download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
-                
-                req3 = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req3) as response3:
-                    img_data = response3.read()
-                
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                with open(local_path, "wb") as f:
-                    f.write(img_data)
-                
-                return FileResponse(local_path)
-    except Exception as e:
-        print(f"Failed to fetch avatar via bot API for {telegram_id}:", e)
-
-    status = get_current_status(telegram_id)
-    if status and status.get("photo_url"):
-        return RedirectResponse(status["photo_url"])
-
-    return Response(status_code=404)
-
 @router.post("/api/checkin")
-def checkin(background_tasks: BackgroundTasks, payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
+def checkin(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
     try:
         user_id = user["id"]
         first_name = user["first_name"]
         last_name = user.get("last_name") or ""
         username = user.get("username") or ""
-        photo_url = user.get("photo_url") or ""
 
-        status_data = get_current_status(user_id)
-        
-        if photo_url and photo_url.startswith("http"):
-            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{user_id}.jpg")
-            if not status_data or status_data.get("photo_url") != photo_url or not os.path.exists(local_path):
-                background_tasks.add_task(download_avatar_sync, user_id, photo_url)
-
-        upsert_employee(user_id, first_name, last_name, username, photo_url)
+        upsert_employee(user_id, first_name, last_name, username, "")
 
         current_status = get_current_status(user_id)
         status_name = current_status["status"] if current_status else "offline"
@@ -209,29 +137,20 @@ def get_status_by_id(telegramId: int, user: dict = Depends(auth)):
             return JSONResponse(status_code=404, content={"error": "Працівника не знайдено"})
 
         valid_actions = get_valid_actions(status_data["status"])
-        transform_photo_url(status_data)
         return {**status_data, "validActions": valid_actions}
     except Exception as e:
         print("Status error:", e)
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @router.get("/api/my-status")
-def get_my_status(background_tasks: BackgroundTasks, user: dict = Depends(auth)):
+def get_my_status(user: dict = Depends(auth)):
     try:
         user_id = user["id"]
         first_name = user["first_name"]
         last_name = user.get("last_name") or ""
         username = user.get("username") or ""
-        photo_url = user.get("photo_url") or ""
 
-        status_data = get_current_status(user_id)
-        
-        if photo_url and photo_url.startswith("http"):
-            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{user_id}.jpg")
-            if not status_data or status_data.get("photo_url") != photo_url or not os.path.exists(local_path):
-                background_tasks.add_task(download_avatar_sync, user_id, photo_url)
-
-        upsert_employee(user_id, first_name, last_name, username, photo_url)
+        upsert_employee(user_id, first_name, last_name, username, "")
 
         status_data = get_current_status(user_id)
         status_name = status_data["status"] if status_data else "offline"
@@ -249,7 +168,6 @@ def get_my_status(background_tasks: BackgroundTasks, user: dict = Depends(auth))
 
         is_admin = user_id in ADMIN_IDS
 
-        transform_photo_url(res_data)
         return {**res_data, "validActions": valid_actions, "todayEvents": today_events, "isAdmin": is_admin}
     except Exception as e:
         print("My status error:", e)
@@ -259,8 +177,6 @@ def get_my_status(background_tasks: BackgroundTasks, user: dict = Depends(auth))
 def get_statuses(user: dict = Depends(auth)):
     try:
         statuses = get_all_statuses()
-        for s in statuses:
-            transform_photo_url(s)
 
         in_office_count = len([s for s in statuses if s["status"] == "in_office"])
         field_trip_count = len([s for s in statuses if s["status"] == "field_trip"])

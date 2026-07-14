@@ -319,9 +319,7 @@ async function loadDashboardData(silent = false) {
           <div class="group-employees">
             ${group.employees.map((emp, i) => {
               const initials = getInitials(emp.first_name, emp.last_name);
-              const avatarHtml = emp.photo_url 
-                ? `<img src="${emp.photo_url}" class="employee-avatar-img" alt="${escapeHtml(emp.first_name)}" />`
-                : initials;
+              const avatarHtml = initials;
               const timeStr = emp.last_event_at ? formatTime(emp.last_event_at) : '';
               
               const statusLabels = {
