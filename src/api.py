@@ -2,9 +2,10 @@ import os
 from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, Response, RedirectResponse
 import urllib.request
 import hashlib
+import json
 
 from src.auth import get_auth_dependency
 from src.database import (
@@ -42,11 +43,53 @@ def download_avatar_sync(user_id: int, photo_url: str):
 
 def transform_photo_url(employee: dict):
     if employee and employee.get("photo_url"):
-        local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{employee['telegram_id']}.jpg")
-        if os.path.exists(local_path):
-            url_hash = hashlib.md5(employee["photo_url"].encode()).hexdigest()[:8]
-            employee["photo_url"] = f"/avatars/{employee['telegram_id']}.jpg?v={url_hash}"
+        url_hash = hashlib.md5(employee["photo_url"].encode()).hexdigest()[:8]
+        employee["photo_url"] = f"/api/avatar/{employee['telegram_id']}?v={url_hash}"
     return employee
+
+@router.get("/api/avatar/{telegram_id}")
+async def get_avatar(telegram_id: int):
+    local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{telegram_id}.jpg")
+    
+    if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+        return FileResponse(local_path)
+        
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUserProfilePhotos?user_id={telegram_id}&limit=1"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read())
+        
+        if data.get("ok") and data["result"]["total_count"] > 0:
+            photos = data["result"]["photos"][0]
+            file_id = photos[-1]["file_id"]
+            
+            file_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
+            req2 = urllib.request.Request(file_url)
+            with urllib.request.urlopen(req2) as response2:
+                data2 = json.loads(response2.read())
+                
+            if data2.get("ok"):
+                file_path = data2["result"]["file_path"]
+                download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+                
+                req3 = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req3) as response3:
+                    img_data = response3.read()
+                
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, "wb") as f:
+                    f.write(img_data)
+                
+                return FileResponse(local_path)
+    except Exception as e:
+        print(f"Failed to fetch avatar via bot API for {telegram_id}:", e)
+
+    status = get_current_status(telegram_id)
+    if status and status.get("photo_url"):
+        return RedirectResponse(status["photo_url"])
+
+    return Response(status_code=404)
 
 @router.post("/api/checkin")
 async def checkin(background_tasks: BackgroundTasks, payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
