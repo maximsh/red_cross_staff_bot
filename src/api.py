@@ -42,8 +42,10 @@ def download_avatar_sync(user_id: int, photo_url: str):
 
 def transform_photo_url(employee: dict):
     if employee and employee.get("photo_url"):
-        url_hash = hashlib.md5(employee["photo_url"].encode()).hexdigest()[:8]
-        employee["photo_url"] = f"/avatars/{employee['telegram_id']}.jpg?v={url_hash}"
+        local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "avatars", f"{employee['telegram_id']}.jpg")
+        if os.path.exists(local_path):
+            url_hash = hashlib.md5(employee["photo_url"].encode()).hexdigest()[:8]
+            employee["photo_url"] = f"/avatars/{employee['telegram_id']}.jpg?v={url_hash}"
     return employee
 
 @router.post("/api/checkin")
