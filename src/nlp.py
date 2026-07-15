@@ -46,10 +46,11 @@ SYSTEM_PROMPT = """Ти — асистент HR-системи контролю 
    - Поле `includes_sender` має бути `true`, якщо дія стосується автора повідомлення (наприклад, "я на місці", "ми поїхали", "ми з Івановим"). Якщо повідомлення перелічує лише інших людей або всіх поіменно (включаючи автора в третій особі), `includes_sender` може бути `false`.
    - Поле `is_plural` має бути `true`, якщо дія описана у множині ("повернулися", "ми приїхали", "їдемо"). Якщо в однині ("повернувся", "я поїхав", "на місці") — `false`.
 5. Зроби action = null тільки якщо це звичайна розмова. Якщо це звіт про переміщення, поверни відповідний action.
+6. Якщо вказано транспортний засіб або авто (наприклад, "на жовтому", "своєю", "на дастері"), запиши це в `car_info`.
 
 Приклади:
 Повідомлення: "Я на ЧХ" → action="checkin", destination="ЧХ", includes_sender=true, mentioned_users=[]
-Повідомлення: "Лисенко Коваленко Бортко на жовтому в АТБ" → action="field_start", destination="АТБ", includes_sender=false, mentioned_users=["Лисенко", "Коваленко", "Бортко"]
+Повідомлення: "Лисенко Коваленко Бортко на жовтому в АТБ" → action="field_start", destination="АТБ", includes_sender=false, mentioned_users=["Лисенко", "Коваленко", "Бортко"], car_info="на жовтому"
 Повідомлення: "Поїхав на склад на 30 хвилин" → action="checkin", destination="Склад", duration="30 хвилин", includes_sender=true
 Повідомлення: "Ми з Петровим їдемо на Амосова" → action="checkin", destination="Амосова", includes_sender=true, mentioned_users=["Петров"]
 Повідомлення: "Олег пішов додому" → action="checkout", includes_sender=false, mentioned_users=["Олег"]
@@ -116,6 +117,10 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Список імен або прізвищ інших працівників, які вказані в повідомленні."
+            },
+            "car_info": {
+                "type": "string",
+                "description": "Інформація про автомобіль (наприклад, 'на жовтому', 'на Дастері', 'своєю'), якщо вказано."
             }
         }
     }
@@ -144,10 +149,13 @@ async def analyze_message(text: str, current_status: str) -> Optional[dict]:
         dest = result.get("destination")
         dur = result.get("duration")
 
+        car = result.get("car_info")
+
         return {
             "action": action,
             "destination": dest if dest and dest != "null" else None,
             "duration": dur if dur and dur != "null" else None,
+            "car_info": car if car and car != "null" else None,
             "includes_sender": result.get("includes_sender", True),
             "is_plural": result.get("is_plural", False),
             "mentioned_users": result.get("mentioned_users", []),
