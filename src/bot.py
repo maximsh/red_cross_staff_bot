@@ -134,23 +134,61 @@ def build_active_status_report() -> str:
             print("format_time error:", e)
             return ""
 
-    text = "<b>📋 Зараз на роботі:</b>\n\n"
+    # Grouping
+    groups = {
+        "Офіс": [],
+        "Доміще": [],
+        "Амосова": [],
+        "Склад": [],
+        "На виїзді": []
+    }
+    
     for emp in active_employees:
-        name = f"{emp.get('first_name')} {emp.get('last_name') or ''}".strip()
-        time_str = format_time(emp.get("last_event_at"))
         status = emp.get("status")
+        note = emp.get("note") or ""
+        note_lower = note.lower()
+        
+        if status == "field_trip":
+            groups["На виїзді"].append(emp)
+        else:
+            if "склад" in note_lower:
+                groups["Склад"].append(emp)
+            elif "амосова" in note_lower:
+                groups["Амосова"].append(emp)
+            elif "доміще" in note_lower:
+                groups["Доміще"].append(emp)
+            else:
+                groups["Офіс"].append(emp)
 
-        if status == "in_office":
-            text += f"🟢 <b>{escape_html(name)}</b> (в офісі з {time_str})"
-        elif status == "field_trip":
-            text += f"🟡 <b>{escape_html(name)}</b> (на виїзді з {time_str})"
-
-        note = emp.get("note")
-        if note:
-            text += f" <i>[{escape_html(note)}]</i>"
+    text = "<b>📋 Зараз на роботі:</b>\n\n"
+    
+    for group_name in ["Офіс", "Доміще", "Амосова", "Склад", "На виїзді"]:
+        group_emps = groups[group_name]
+        if not group_emps:
+            continue
+            
+        if group_name == "На виїзді":
+            text += f"🚗 <b>{group_name}:</b>\n"
+        else:
+            text += f"🏢 <b>{group_name}:</b>\n"
+            
+        for emp in group_emps:
+            name = f"{emp.get('first_name')} {emp.get('last_name') or ''}".strip()
+            time_str = format_time(emp.get("last_event_at"))
+            note = emp.get("note")
+            
+            if group_name == "На виїзді":
+                line = f"  🟡 <b>{escape_html(name)}</b> (з {time_str})"
+            else:
+                line = f"  🟢 <b>{escape_html(name)}</b> (з {time_str})"
+                
+            if note:
+                line += f" <i>[{escape_html(note)}]</i>"
+                
+            text += line + "\n"
         text += "\n"
 
-    return text
+    return text.strip()
 
 # Command Handlers
 

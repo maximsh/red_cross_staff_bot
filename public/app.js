@@ -291,33 +291,55 @@ async function loadDashboardData(silent = false) {
 
     // Group employees
     const groups = {
-      in_office: { title: 'В офісі', employees: [] },
-      field_trip: { title: 'На виїзді', employees: [] },
-      offline: { title: 'Не на роботі', employees: [] },
+      office_main: { title: 'Офіс', employees: [], dotClass: 'in_office' },
+      domische: { title: 'Доміще', employees: [], dotClass: 'in_office' },
+      amosova: { title: 'Амосова', employees: [], dotClass: 'in_office' },
+      sklad: { title: 'Склад', employees: [], dotClass: 'in_office' },
+      field_trip: { title: 'На виїзді', employees: [], dotClass: 'field_trip' },
+      offline: { title: 'Не на роботі', employees: [], dotClass: 'offline' },
     };
 
     data.employees.forEach(emp => {
       const status = emp.status || 'offline';
-      if (groups[status]) groups[status].employees.push(emp);
+      if (status === 'field_trip') {
+        groups.field_trip.employees.push(emp);
+      } else if (status === 'in_office') {
+        const note = (emp.note || '').toLowerCase();
+        if (note.includes('склад')) {
+          groups.sklad.employees.push(emp);
+        } else if (note.includes('амосова')) {
+          groups.amosova.employees.push(emp);
+        } else if (note.includes('доміще')) {
+          groups.domische.employees.push(emp);
+        } else {
+          groups.office_main.employees.push(emp);
+        }
+      } else {
+        groups.offline.employees.push(emp);
+      }
     });
 
     // Render list
     let html = '';
     let hasAny = false;
 
-    for (const [status, group] of Object.entries(groups)) {
+    const groupOrder = ['office_main', 'domische', 'amosova', 'sklad', 'field_trip', 'offline'];
+
+    for (const groupKey of groupOrder) {
+      const group = groups[groupKey];
       if (group.employees.length === 0) continue;
       hasAny = true;
 
       html += `
         <div class="status-group">
           <div class="group-header">
-            <div class="group-dot ${status}"></div>
+            <div class="group-dot ${group.dotClass}"></div>
             <span class="group-title">${group.title}</span>
             <span class="group-count">${group.employees.length}</span>
           </div>
           <div class="group-employees">
             ${group.employees.map((emp, i) => {
+              const status = emp.status || 'offline';
               const initials = getInitials(emp.first_name, emp.last_name);
               const avatarHtml = initials;
               const timeStr = emp.last_event_at ? formatTime(emp.last_event_at) : '';
@@ -335,7 +357,7 @@ async function loadDashboardData(silent = false) {
                   <div class="employee-avatar">${avatarHtml}</div>
                   <div class="employee-info">
                     <div class="employee-name">${escapeHtml(emp.first_name)} ${escapeHtml(emp.last_name || '')}</div>
-                    <div class="employee-detail">${statusLabels[status]}</div>
+                    <div class="employee-detail">${statusLabels[status] || ''}</div>
                     ${noteHtml}
                   </div>
                   <div class="employee-status-icon">●</div>
