@@ -15,7 +15,7 @@ let isAdmin = false;
 const els = {
   loading: document.getElementById('loading'),
   toast: document.getElementById('toast'),
-  
+
   // Views
   employeeView: document.getElementById('employeeView'),
   dashboardView: document.getElementById('dashboardView'),
@@ -38,7 +38,7 @@ const els = {
   countOffline: document.getElementById('countOffline'),
   employeeList: document.getElementById('employeeList'),
   emptyState: document.getElementById('emptyState'),
-  
+
   // Modal elements
   modalOverlay: document.getElementById('modalOverlay'),
   modalName: document.getElementById('modalName'),
@@ -144,12 +144,12 @@ async function loadEmployeeStatus() {
   try {
     const data = await apiRequest('GET', '/api/my-status');
     currentStatus = data.status || 'offline';
-    
+
     // Update badge UI
     els.empStatusBadge.setAttribute('data-status', currentStatus);
     const statusMap = {
-      offline: 'Не на роботі',
-      in_office: 'В офісі',
+      offline: 'Відсутній',
+      in_office: 'На роботі',
       field_trip: 'На виїзді',
     };
     els.empStatusText.textContent = statusMap[currentStatus] || currentStatus;
@@ -253,7 +253,7 @@ function initDashboard() {
   els.modalOverlay.addEventListener('click', (e) => {
     if (e.target === els.modalOverlay) closeModal();
   });
-  
+
   if (els.adminSaveAliasesBtn) {
     els.adminSaveAliasesBtn.addEventListener('click', () => {
       const targetId = parseInt(els.modalName.getAttribute('data-id'), 10);
@@ -280,7 +280,7 @@ function updateDashboardTime() {
 async function loadDashboardData(silent = false) {
   try {
     const data = await apiRequest('GET', '/api/statuses');
-    
+
     // Update admin status
     isAdmin = data.summary.isAdmin;
 
@@ -296,7 +296,7 @@ async function loadDashboardData(silent = false) {
       amosova: { title: 'Амосова', employees: [], dotClass: 'in_office' },
       sklad: { title: 'Склад', employees: [], dotClass: 'in_office' },
       field_trip: { title: 'На виїзді', employees: [], dotClass: 'field_trip' },
-      offline: { title: 'Не на роботі', employees: [], dotClass: 'offline' },
+      offline: { title: 'Відстуні', employees: [], dotClass: 'offline' },
     };
 
     data.employees.forEach(emp => {
@@ -343,7 +343,7 @@ async function loadDashboardData(silent = false) {
               const initials = getInitials(emp.first_name, emp.last_name);
               const avatarHtml = initials;
               const timeStr = emp.last_event_at ? formatTime(emp.last_event_at) : '';
-              
+
               const statusLabels = {
                 in_office: `з ${timeStr}`,
                 field_trip: `виїзд ${timeStr}`,
@@ -412,9 +412,9 @@ async function openEmployeeDetail(telegramId) {
     els.modalName.setAttribute('data-id', telegramId);
 
     const statusLabels = {
-      in_office: '🟢 В офісі',
+      in_office: '🟢 На роботі',
       field_trip: '🟡 На виїзді',
-      offline: '⚫ Не на роботі',
+      offline: '⚫ Відсутній',
     };
     els.modalStatus.textContent = statusLabels[statusData.status] || statusData.status;
     els.modalStatus.className = `modal-status ${statusData.status}`;
@@ -506,10 +506,10 @@ async function sendAdminAction(telegramId, action) {
     });
 
     showToast('Статус успішно змінено', 'success');
-    
+
     // Refresh the modal content with the new state
     await openEmployeeDetail(telegramId);
-    
+
     // Refresh dashboard list silently
     loadDashboardData(true);
 
@@ -546,7 +546,7 @@ async function sendAdminAliases(telegramId, aliases) {
     });
 
     showToast('Аліаси успішно збережено', 'success');
-    
+
     // Refresh dashboard list silently
     loadDashboardData(true);
 

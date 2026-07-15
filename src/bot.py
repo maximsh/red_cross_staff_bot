@@ -88,8 +88,8 @@ async def handle_quick_action(message: Message, event_type: str, success_msg: st
 
     if event_type not in valid_actions:
         status_map = {
-            "offline": "не на роботі (офлайн)",
-            "in_office": "в офісі",
+            "offline": "відсутній",
+            "in_office": "на роботі",
             "field_trip": "на виїзді",
         }
         await message.reply(
@@ -142,12 +142,12 @@ def build_active_status_report() -> str:
         "Склад": [],
         "На виїзді": []
     }
-    
+
     for emp in active_employees:
         status = emp.get("status")
         note = emp.get("note") or ""
         note_lower = note.lower()
-        
+
         if status == "field_trip":
             groups["На виїзді"].append(emp)
         else:
@@ -161,30 +161,30 @@ def build_active_status_report() -> str:
                 groups["Офіс"].append(emp)
 
     text = "<b>📋 Зараз на роботі:</b>\n\n"
-    
+
     for group_name in ["Офіс", "Доміще", "Амосова", "Склад", "На виїзді"]:
         group_emps = groups[group_name]
         if not group_emps:
             continue
-            
+
         if group_name == "На виїзді":
             text += f"🚗 <b>{group_name}:</b>\n"
         else:
             text += f"🏢 <b>{group_name}:</b>\n"
-            
+
         for emp in group_emps:
             name = f"{emp.get('first_name')} {emp.get('last_name') or ''}".strip()
             time_str = format_time(emp.get("last_event_at"))
             note = emp.get("note")
-            
+
             if group_name == "На виїзді":
                 line = f"  🟡 <b>{escape_html(name)}</b> (з {time_str})"
             else:
                 line = f"  🟢 <b>{escape_html(name)}</b> (з {time_str})"
-                
+
             if note:
                 line += f" <i>[{escape_html(note)}]</i>"
-                
+
             text += line + "\n"
         text += "\n"
 
