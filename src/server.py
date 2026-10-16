@@ -34,6 +34,11 @@ async def lifespan(app: FastAPI):
     # Start Telegram bot (polling) in the background
     # handle_signals=False — let uvicorn handle SIGINT/SIGTERM instead of aiogram
     print("🤖 Starting Telegram bot...")
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+    except Exception as e:
+        print("⚠️ Failed to delete webhook before polling:", e)
+
     polling_task = asyncio.create_task(
         dp.start_polling(bot, handle_signals=False)
     )
