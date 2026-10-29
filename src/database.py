@@ -2,6 +2,9 @@ import sqlite3
 import os
 import threading
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+KYIV_TZ = ZoneInfo("Europe/Kyiv")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'hr.db')
 db_lock = threading.Lock()
@@ -189,14 +192,10 @@ def get_all_statuses():
             conn.close()
 
 def get_today_events(telegram_id: int):
-    # Calculate today's date range in UTC based on Kyiv timezone (UTC+3)
-    # This matches the Node.js implementation:
-    kyiv_offset = timedelta(hours=3)
-    now_utc = datetime.now(timezone.utc)
-    kyiv_now = now_utc + kyiv_offset
-    today_start_kyiv = kyiv_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_start_utc = today_start_kyiv - kyiv_offset
-
+    # Calculate today's date range in UTC based on Kyiv timezone
+    now_kyiv = datetime.now(KYIV_TZ)
+    today_start_kyiv = now_kyiv.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_kyiv.astimezone(timezone.utc)
     today_start_utc_str = today_start_utc.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
 
     with db_lock:

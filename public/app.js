@@ -127,7 +127,7 @@ function initEmployee() {
 
   // Set date
   const today = new Date();
-  const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+  const options = { timeZone: 'Europe/Kyiv', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
   els.empDate.textContent = today.toLocaleDateString('uk-UA', options);
 
   // Bind actions
@@ -272,8 +272,8 @@ function initDashboard() {
 
 function updateDashboardTime() {
   const today = new Date();
-  const options = { day: 'numeric', month: 'long', year: 'numeric' };
-  const timeOpts = { hour: '2-digit', minute: '2-digit' };
+  const options = { timeZone: 'Europe/Kyiv', day: 'numeric', month: 'long', year: 'numeric' };
+  const timeOpts = { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', hour12: false };
   els.dashDate.textContent = `${today.toLocaleDateString('uk-UA', options)}, ${today.toLocaleTimeString('uk-UA', timeOpts)}`;
 }
 
@@ -569,10 +569,12 @@ async function sendAdminAliases(telegramId, aliases) {
 function formatTime(isoString) {
   if (!isoString) return '';
   const date = new Date(isoString);
-  const kyivTime = new Date(date.getTime() + 3 * 60 * 60 * 1000);
-  const hours = String(kyivTime.getUTCHours()).padStart(2, '0');
-  const minutes = String(kyivTime.getUTCMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+  return new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
 }
 
 function getInitials(firstName, lastName) {

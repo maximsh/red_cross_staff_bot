@@ -1,6 +1,9 @@
 import os
 import html
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+KYIV_TZ = ZoneInfo("Europe/Kyiv")
 from aiogram import Bot, Dispatcher, F, BaseMiddleware
 from aiogram.types import (
     Message,
@@ -101,8 +104,8 @@ async def handle_quick_action(message: Message, event_type: str, success_msg: st
     # Record the event
     record_event(user.id, event_type)
 
-    # Format local time (Europe/Kyiv, UTC+3)
-    kyiv_time = datetime.now(timezone.utc) + timedelta(hours=3)
+    # Format local time (Europe/Kyiv)
+    kyiv_time = datetime.now(KYIV_TZ)
     time_str = kyiv_time.strftime("%H:%M")
 
     display_name = f"{user.first_name} {user.last_name or ''}".strip()
@@ -127,8 +130,8 @@ def build_active_status_report() -> str:
             # Parse ISO string
             clean_str = iso_string.replace("Z", "+00:00")
             dt = datetime.fromisoformat(clean_str)
-            # Convert to Kyiv timezone (UTC+3)
-            kyiv_dt = dt.astimezone(timezone(timedelta(hours=3)))
+            # Convert to Kyiv timezone
+            kyiv_dt = dt.astimezone(KYIV_TZ)
             return kyiv_dt.strftime("%H:%M")
         except Exception as e:
             print("format_time error:", e)
@@ -477,7 +480,7 @@ async def handle_group_text(message: Message):
         return
 
     # Format confirmation
-    kyiv_time = datetime.now(timezone.utc) + timedelta(hours=3)
+    kyiv_time = datetime.now(KYIV_TZ)
     time_str = kyiv_time.strftime("%H:%M")
 
     action_messages = {
