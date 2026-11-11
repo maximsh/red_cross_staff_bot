@@ -20,6 +20,7 @@ from aiogram.filters import Command, CommandStart
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "")
 APP_SHORT_NAME = os.getenv("APP_SHORT_NAME", "staff")
+ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
 
 # Shared holder for bot username
 bot_username_holder = {"username": ""}
@@ -86,6 +87,13 @@ async def handle_quick_action(message: Message, event_type: str, success_msg: st
     upsert_employee(user.id, user.first_name, user.last_name or "", user.username or "")
 
     current_status = get_current_status(user.id)
+    if not current_status:
+        await message.reply(
+            f"❌ <b>{escape_html(user.first_name)}</b>, ви не є зареєстрованим співробітником або були видалені з системи.",
+            parse_mode="HTML",
+        )
+        return
+
     status = current_status.get("status") if current_status else "offline"
     valid_actions = get_valid_actions(status)
 
@@ -296,6 +304,109 @@ async def cmd_status(message: Message, bot: Bot):
         )
 
     await message.reply(report_text, parse_mode="HTML", reply_markup=keyboard)
+
+@dp.message(Command("delete_employee", "delete_user", "remove_employee", "delete"))
+async def cmd_delete_employee(message: Message):
+    user = message.from_user
+    if not user:
+        return
+
+    if user.id not in ADMIN_IDS:
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    from src.database import delete_employee, get_employee, get_employee_by_username
+
+    target_id = None
+    target_emp = None
+
+    # Check 1: replied message
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+        target_emp = get_employee(target_id)
+    else:
+        # Check 2: command arguments
+        text = message.text or ""
+        parts = text.split(maxsplit=1)
+        if len(parts) > 1:
+            arg = parts[1].strip()
+            if arg.isdigit():
+                target_id = int(arg)
+                target_emp = get_employee(target_id)
+            else:
+                target_emp = get_employee_by_username(arg)
+                if target_emp:
+                    target_id = target_emp["telegram_id"]
+
+    if not target_id:
+        await message.reply(
+            "ℹ️ <b>Видалення співробітника</b>\n\n"
+            "Способи використання:\n"
+            "• Відповісти на повідомлення користувача: <code>/delete</code>\n"
+            "• Вказати username: <code>/delete @username</code>\n"
+            "• Вказати ID: <code>/delete 123456789</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    if target_id == user.id:
+        await message.reply("❌ Не можна видалити власного користувача.")
+        return
+
+    if not target_emp:
+        target_emp = get_employee(target_id)
+
+    name_str = f"{target_emp['first_name']} {target_emp.get('last_name', '')}".strip() if target_emp else f"ID: {target_id}"
+
+    delete_employee(target_id, deleted_by=user.id)
+    await message.reply(
+        f"✅ Співробітника <b>{escape_html(name_str)}</b> успішно видалено з системи.",
+        parse_mode="HTML",
+    )
+
+@dp.message(Command("restore_employee", "restore_user", "restore"))
+async def cmd_restore_employee(message: Message):
+    user = message.from_user
+    if not user:
+        return
+
+    if user.id not in ADMIN_IDS:
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    from src.database import restore_employee, get_employee_by_username
+
+    target_id = None
+    text = message.text or ""
+    parts = text.split(maxsplit=1)
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+    elif len(parts) > 1:
+        arg = parts[1].strip()
+        if arg.isdigit():
+            target_id = int(arg)
+        else:
+            emp = get_employee_by_username(arg)
+            if emp:
+                target_id = emp["telegram_id"]
+
+    if not target_id:
+        await message.reply(
+            "ℹ️ <b>Відновлення співробітника</b> (зняття блокування на реєстрацію)\n\n"
+            "Використання:\n"
+            "• <code>/restore @username</code>\n"
+            "• <code>/restore &lt;telegram_id&gt;</code>\n"
+            "• Або відповіддю на повідомлення: <code>/restore</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    restore_employee(target_id)
+    await message.reply(
+        f"✅ Співробітника (ID: <code>{target_id}</code>) відновлено. Тепер він знову може бути доданий до системи.",
+        parse_mode="HTML",
+    )
 
 # Handle channel posts
 

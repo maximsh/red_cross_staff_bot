@@ -14,6 +14,10 @@ from src.database import (
     get_today_events,
     get_valid_actions,
     set_employee_aliases,
+    delete_employee,
+    restore_employee,
+    get_employee,
+    is_deleted_employee,
 )
 
 # Load configuration
@@ -35,10 +39,19 @@ def checkin(payload: Optional[EventRequest] = None, user: dict = Depends(auth)):
         last_name = user.get("last_name") or ""
         username = user.get("username") or ""
 
-        upsert_employee(user_id, first_name, last_name, username, "")
+        if not upsert_employee(user_id, first_name, last_name, username, ""):
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Ваш акаунт було видалено зі списку співробітників"},
+            )
 
         current_status = get_current_status(user_id)
-        status_name = current_status["status"] if current_status else "offline"
+        if not current_status:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Працівника не знайдено в системі"},
+            )
+        status_name = current_status["status"]
         valid_actions = get_valid_actions(status_name)
 
         if "checkin" not in valid_actions:
@@ -62,7 +75,12 @@ def checkout(payload: Optional[EventRequest] = None, user: dict = Depends(auth))
     try:
         user_id = user["id"]
         current_status = get_current_status(user_id)
-        status_name = current_status["status"] if current_status else "offline"
+        if not current_status:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Працівника не знайдено в системі"},
+            )
+        status_name = current_status["status"]
         valid_actions = get_valid_actions(status_name)
 
         if "checkout" not in valid_actions:
@@ -86,7 +104,12 @@ def field_start(payload: Optional[EventRequest] = None, user: dict = Depends(aut
     try:
         user_id = user["id"]
         current_status = get_current_status(user_id)
-        status_name = current_status["status"] if current_status else "offline"
+        if not current_status:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Працівника не знайдено в системі"},
+            )
+        status_name = current_status["status"]
         valid_actions = get_valid_actions(status_name)
 
         if "field_start" not in valid_actions:
@@ -110,7 +133,12 @@ def field_end(payload: Optional[EventRequest] = None, user: dict = Depends(auth)
     try:
         user_id = user["id"]
         current_status = get_current_status(user_id)
-        status_name = current_status["status"] if current_status else "offline"
+        if not current_status:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Працівника не знайдено в системі"},
+            )
+        status_name = current_status["status"]
         valid_actions = get_valid_actions(status_name)
 
         if "field_end" not in valid_actions:
@@ -150,9 +178,19 @@ def get_my_status(user: dict = Depends(auth)):
         last_name = user.get("last_name") or ""
         username = user.get("username") or ""
 
-        upsert_employee(user_id, first_name, last_name, username, "")
-
+        is_active = upsert_employee(user_id, first_name, last_name, username, "")
         status_data = get_current_status(user_id)
+        is_admin = user_id in ADMIN_IDS
+
+        if not status_data and not is_active:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Ваш акаунт було видалено зі списку співробітників",
+                    "isAdmin": is_admin
+                }
+            )
+
         status_name = status_data["status"] if status_data else "offline"
         valid_actions = get_valid_actions(status_name)
         today_events = get_today_events(user_id)
@@ -165,8 +203,6 @@ def get_my_status(user: dict = Depends(auth)):
             "status": "offline",
             "last_event_at": None,
         }
-
-        is_admin = user_id in ADMIN_IDS
 
         return {**res_data, "validActions": valid_actions, "todayEvents": today_events, "isAdmin": is_admin}
     except Exception as e:
@@ -261,4 +297,49 @@ def admin_set_aliases(payload: AdminSetAliasesRequest, user: dict = Depends(auth
         return {"success": True, "aliases": aliases_str}
     except Exception as e:
         print("Admin set aliases error:", e)
+        return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
+class AdminDeleteEmployeeRequest(BaseModel):
+    telegram_id: int
+
+@router.post("/api/admin/delete-employee")
+def admin_delete_employee(payload: AdminDeleteEmployeeRequest, user: dict = Depends(auth)):
+    try:
+        if user["id"] not in ADMIN_IDS:
+            return JSONResponse(status_code=403, content={"error": "У вас немає прав адміністратора"})
+
+        target_id = payload.telegram_id
+        if target_id == user["id"]:
+            return JSONResponse(status_code=400, content={"error": "Не можна видалити власний акаунт"})
+
+        emp = get_employee(target_id)
+        if not emp:
+            return JSONResponse(status_code=404, content={"error": "Працівника не знайдено"})
+
+        delete_employee(target_id, deleted_by=user["id"])
+        return {
+            "success": True,
+            "message": f"Співробітника {emp['first_name']} успішно видалено",
+        }
+    except Exception as e:
+        print("Admin delete employee error:", e)
+        return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
+class AdminRestoreEmployeeRequest(BaseModel):
+    telegram_id: int
+
+@router.post("/api/admin/restore-employee")
+def admin_restore_employee(payload: AdminRestoreEmployeeRequest, user: dict = Depends(auth)):
+    try:
+        if user["id"] not in ADMIN_IDS:
+            return JSONResponse(status_code=403, content={"error": "У вас немає прав адміністратора"})
+
+        target_id = payload.telegram_id
+        restore_employee(target_id)
+        return {
+            "success": True,
+            "message": "Співробітника відновлено (знято обмеження на реєстрацію)",
+        }
+    except Exception as e:
+        print("Admin restore employee error:", e)
         return JSONResponse(status_code=500, content={"error": "Internal server error"})

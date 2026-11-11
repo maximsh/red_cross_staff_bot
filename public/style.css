@@ -620,6 +620,12 @@ body {
 .admin-btn.field-start-btn:not(:disabled) { border-color: rgba(255, 171, 0, 0.3); background: rgba(255, 171, 0, 0.1); color: var(--tg-theme-text-color); }
 .admin-btn.field-end-btn:not(:disabled) { border-color: rgba(68, 138, 255, 0.3); background: rgba(68, 138, 255, 0.1); color: var(--tg-theme-text-color); }
 .admin-btn.checkout-btn:not(:disabled) { border-color: rgba(120, 144, 156, 0.3); background: rgba(120, 144, 156, 0.1); color: var(--tg-theme-text-color); }
+.admin-btn.delete-employee-btn:not(:disabled) { border-color: rgba(255, 82, 82, 0.3); background: rgba(255, 82, 82, 0.1); color: #ff5252; }
+.admin-btn.delete-employee-btn:not(:disabled):hover,
+.admin-btn.delete-employee-btn:not(:disabled):active {
+  background: rgba(255, 82, 82, 0.2);
+  border-color: rgba(255, 82, 82, 0.5);
+}
 
 .modal-timeline { display: flex; flex-direction: column; }
 .modal-timeline-title { font-size: 13px; font-weight: 700; color: var(--tg-theme-hint-color); margin-bottom: 12px; }

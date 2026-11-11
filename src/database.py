@@ -51,6 +51,12 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_events_telegram_id ON events(telegram_id);
             CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+
+            CREATE TABLE IF NOT EXISTS deleted_employees (
+              telegram_id INTEGER PRIMARY KEY,
+              deleted_at DATETIME DEFAULT (datetime('now')),
+              deleted_by INTEGER DEFAULT NULL
+            );
             """)
             
             # Add photo_url column if it doesn't exist
@@ -69,10 +75,49 @@ def init_db():
         finally:
             conn.close()
 
+def is_deleted_employee(telegram_id: int) -> bool:
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM deleted_employees WHERE telegram_id = ?", (telegram_id,))
+            return cur.fetchone() is not None
+        finally:
+            conn.close()
+
+def get_employee(telegram_id: int):
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM employees WHERE telegram_id = ?", (telegram_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+def get_employee_by_username(username: str):
+    username = username.lstrip('@').lower()
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM employees WHERE LOWER(username) = ?", (username,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
 def upsert_employee(telegram_id: int, first_name: str, last_name: str = '', username: str = '', photo_url: str = ''):
     with db_lock:
         conn = get_db_connection()
         try:
+            # Check if this user was deleted
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM deleted_employees WHERE telegram_id = ?", (telegram_id,))
+            if cur.fetchone():
+                return False
+
             conn.execute("""
                 INSERT INTO employees (telegram_id, first_name, last_name, username, photo_url)
                 VALUES (?, ?, ?, ?, ?)
@@ -89,6 +134,46 @@ def upsert_employee(telegram_id: int, first_name: str, last_name: str = '', user
                 VALUES (?, 'offline')
             """, (telegram_id,))
             conn.commit()
+            return True
+        finally:
+            conn.close()
+
+def delete_employee(telegram_id: int, deleted_by: int = None):
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            conn.execute("BEGIN TRANSACTION;")
+            now = get_iso_now()
+            # Record in deleted_employees table to prevent auto-registration
+            conn.execute("""
+                INSERT OR REPLACE INTO deleted_employees (telegram_id, deleted_at, deleted_by)
+                VALUES (?, ?, ?)
+            """, (telegram_id, now, deleted_by))
+
+            # Delete from current_status
+            conn.execute("DELETE FROM current_status WHERE telegram_id = ?", (telegram_id,))
+
+            # Delete from events
+            conn.execute("DELETE FROM events WHERE telegram_id = ?", (telegram_id,))
+
+            # Delete from employees
+            conn.execute("DELETE FROM employees WHERE telegram_id = ?", (telegram_id,))
+
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.execute("ROLLBACK;")
+            raise e
+        finally:
+            conn.close()
+
+def restore_employee(telegram_id: int):
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            conn.execute("DELETE FROM deleted_employees WHERE telegram_id = ?", (telegram_id,))
+            conn.commit()
+            return True
         finally:
             conn.close()
 

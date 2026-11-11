@@ -49,6 +49,8 @@ const els = {
   adminBtns: document.querySelectorAll('.admin-btn'),
   adminAliasesInput: document.getElementById('adminAliasesInput'),
   adminSaveAliasesBtn: document.getElementById('adminSaveAliasesBtn'),
+  adminDangerSection: document.getElementById('adminDangerSection'),
+  adminDeleteEmployeeBtn: document.getElementById('adminDeleteEmployeeBtn'),
 };
 
 // ===== Common API requests =====
@@ -261,6 +263,16 @@ function initDashboard() {
     });
   }
 
+  if (els.adminDeleteEmployeeBtn) {
+    els.adminDeleteEmployeeBtn.addEventListener('click', () => {
+      const targetId = parseInt(els.modalName.getAttribute('data-id'), 10);
+      const name = els.modalName.textContent;
+      if (targetId) {
+        confirmDeleteEmployee(targetId, name);
+      }
+    });
+  }
+
   // Load dashboard data
   loadDashboardData();
 
@@ -433,6 +445,18 @@ async function openEmployeeDetail(telegramId) {
       if (els.adminAliasesInput) {
         els.adminAliasesInput.value = statusData.aliases || '';
       }
+      if (els.adminDangerSection) {
+        const myId = tg?.initDataUnsafe?.user?.id;
+        if (myId && telegramId === myId) {
+          els.adminDangerSection.style.display = 'none';
+        } else {
+          els.adminDangerSection.style.display = 'block';
+          if (els.adminDeleteEmployeeBtn) {
+            els.adminDeleteEmployeeBtn.disabled = false;
+            els.adminDeleteEmployeeBtn.innerHTML = '<span>🗑️</span><span>Видалити співробітника</span>';
+          }
+        }
+      }
     } else {
       els.modalAdminActions.style.display = 'none';
     }
@@ -562,6 +586,55 @@ async function sendAdminAliases(telegramId, aliases) {
   } finally {
     btn.textContent = originalText;
     btn.disabled = false;
+  }
+}
+
+function confirmDeleteEmployee(telegramId, name) {
+  const msg = `Ви впевнені, що хочете видалити співробітника "${name}" зі списку?`;
+
+  const doDelete = async () => {
+    const btn = els.adminDeleteEmployeeBtn;
+    if (!btn || btn.disabled) return;
+
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.impactOccurred('medium');
+    }
+
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = '<span>⏳</span><span>Видалення...</span>';
+    btn.disabled = true;
+
+    try {
+      await apiRequest('POST', '/api/admin/delete-employee', {
+        telegram_id: telegramId
+      });
+
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+
+      showToast('Співробітника видалено', 'success');
+      closeModal();
+      await loadDashboardData(true);
+    } catch (err) {
+      console.error('Delete employee failed:', err);
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
+      showToast(err.message || 'Помилка видалення', 'error');
+      btn.innerHTML = originalContent;
+      btn.disabled = false;
+    }
+  };
+
+  if (tg?.showConfirm) {
+    tg.showConfirm(msg, (confirmed) => {
+      if (confirmed) doDelete();
+    });
+  } else {
+    if (window.confirm(msg)) {
+      doDelete();
+    }
   }
 }
 
