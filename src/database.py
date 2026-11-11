@@ -57,6 +57,24 @@ def init_db():
               deleted_at DATETIME DEFAULT (datetime('now')),
               deleted_by INTEGER DEFAULT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS monitored_topics (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              chat_id INTEGER NOT NULL,
+              thread_id INTEGER NOT NULL,
+              topic_type TEXT NOT NULL DEFAULT 'trips',
+              topic_name TEXT DEFAULT '',
+              created_at DATETIME DEFAULT (datetime('now')),
+              UNIQUE(chat_id, thread_id, topic_type)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_monitored_topics ON monitored_topics(chat_id, thread_id, topic_type);
+
+            CREATE TABLE IF NOT EXISTS system_settings (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at DATETIME DEFAULT (datetime('now'))
+            );
             """)
             
             # Add photo_url column if it doesn't exist
@@ -307,3 +325,112 @@ def get_valid_actions(status: str):
         return ['field_end', 'checkout', 'checkin']
     else:
         return ['checkin', 'field_start']
+
+def add_monitored_topic(chat_id: int, thread_id: int, topic_type: str = 'trips', topic_name: str = '') -> bool:
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            conn.execute("""
+                INSERT INTO monitored_topics (chat_id, thread_id, topic_type, topic_name)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(chat_id, thread_id, topic_type) DO UPDATE SET
+                  topic_name = excluded.topic_name
+            """, (chat_id, thread_id, topic_type, topic_name or ''))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+def remove_monitored_topic(chat_id: int, thread_id: int, topic_type: str = 'trips') -> bool:
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            conn.execute("""
+                DELETE FROM monitored_topics
+                WHERE chat_id = ? AND thread_id = ? AND topic_type = ?
+            """, (chat_id, thread_id, topic_type))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+def get_monitored_topics(topic_type: str = None):
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            if topic_type:
+                cur.execute("SELECT * FROM monitored_topics WHERE topic_type = ? ORDER BY id DESC", (topic_type,))
+            else:
+                cur.execute("SELECT * FROM monitored_topics ORDER BY id DESC")
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+def is_topic_monitored(chat_id: int, thread_id: int = None, topic_type: str = 'trips') -> bool:
+    # 1. Check environment variables
+    env_chat = os.getenv("TRIPS_CHAT_ID")
+    env_thread = os.getenv("TRIPS_THREAD_ID")
+    if env_chat and env_thread:
+        try:
+            if int(env_chat) == chat_id and (thread_id is not None and int(env_thread) == thread_id):
+                return True
+        except ValueError:
+            pass
+
+    if thread_id is None:
+        return False
+
+    # 2. Check database
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT 1 FROM monitored_topics
+                WHERE chat_id = ? AND thread_id = ? AND topic_type = ?
+            """, (chat_id, thread_id, topic_type))
+            return cur.fetchone() is not None
+        finally:
+            conn.close()
+
+def set_setting(key: str, value: str):
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            conn.execute("""
+                INSERT INTO system_settings (key, value, updated_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(key) DO UPDATE SET
+                  value = excluded.value,
+                  updated_at = excluded.updated_at
+            """, (key, str(value)))
+            conn.commit()
+        finally:
+            conn.close()
+
+def get_setting(key: str, default: str = None) -> str:
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT value FROM system_settings WHERE key = ?", (key,))
+            row = cur.fetchone()
+            return row["value"] if row else default
+        finally:
+            conn.close()
+
+def get_main_chat_id():
+    env_val = os.getenv("MAIN_CHAT_ID")
+    if env_val and env_val.strip().lstrip("-").isdigit():
+        return int(env_val.strip())
+    db_val = get_setting("main_chat_id")
+    if db_val and db_val.strip().lstrip("-").isdigit():
+        return int(db_val.strip())
+    return None
+
+def set_main_chat_id(chat_id: int):
+    set_setting("main_chat_id", str(chat_id))
+
+

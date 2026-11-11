@@ -2,6 +2,9 @@ import os
 import html
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
+from dotenv import load_dotenv
+
+load_dotenv()
 
 KYIV_TZ = ZoneInfo("Europe/Kyiv")
 from aiogram import Bot, Dispatcher, F, BaseMiddleware
@@ -40,9 +43,16 @@ class AutoRegisterMiddleware(BaseMiddleware):
             except Exception as e:
                 print("Error fetching bot info:", e)
 
-        # Auto-register user on any interaction
+        # Auto-register user ONLY on private interaction with the bot
+        # (prevents auto-registering untracked chat members or guests in groups)
+        is_private = False
+        if hasattr(event, "message") and event.message and event.message.chat:
+            is_private = (event.message.chat.type == "private")
+        elif hasattr(event, "callback_query") and event.callback_query and event.callback_query.message:
+            is_private = (event.callback_query.message.chat.type == "private")
+
         user = data.get("event_from_user")
-        if user:
+        if user and is_private:
             from src.database import upsert_employee
             try:
                 upsert_employee(
@@ -305,6 +315,38 @@ async def cmd_status(message: Message, bot: Bot):
 
     await message.reply(report_text, parse_mode="HTML", reply_markup=keyboard)
 
+@dp.message(Command("add_employee", "add_user", "add"))
+async def cmd_add_employee(message: Message):
+    if not await is_admin(message):
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    target_user = None
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_user = message.reply_to_message.from_user
+
+    if not target_user:
+        await message.reply(
+            "ℹ️ <b>Додавання співробітника або волонтера до системи:</b>\n\n"
+            "Щоб зареєструвати людину, надішліть команду <code>/add</code> <b>у відповідь</b> на її повідомлення в чаті.",
+            parse_mode="HTML"
+        )
+        return
+
+    from src.database import upsert_employee, restore_employee
+    restore_employee(target_user.id)
+    upsert_employee(
+        telegram_id=target_user.id,
+        first_name=target_user.first_name,
+        last_name=target_user.last_name or "",
+        username=target_user.username or "",
+    )
+    name = f"{target_user.first_name} {target_user.last_name or ''}".strip()
+    await message.reply(
+        f"✅ Співробітника/волонтера <b>{escape_html(name)}</b> (ID: <code>{target_user.id}</code>) успішно додано до системи!",
+        parse_mode="HTML"
+    )
+
 @dp.message(Command("delete_employee", "delete_user", "remove_employee", "delete"))
 async def cmd_delete_employee(message: Message):
     user = message.from_user
@@ -456,6 +498,224 @@ async def handle_channel_post(channel_post: Message, bot: Bot):
         )
         await channel_post.reply("📊 Панель контролю команди:", reply_markup=keyboard)
 
+
+# Helpers
+
+import re
+
+def normalize_name(text: str) -> str:
+    if not text:
+        return ""
+    t = text.lower().strip().lstrip("@")
+    t = re.sub(r'^(?:волонтер(?:ка)?|водій|пан|пані|координатор)\s+', '', t)
+    return t.strip()
+
+async def is_admin(message: Message) -> bool:
+    user = message.from_user
+    if not user:
+        return False
+    if user.id in ADMIN_IDS:
+        return True
+    if message.chat and message.chat.type in ("group", "supergroup"):
+        try:
+            member = await message.chat.get_member(user.id)
+            if member.status in ("creator", "administrator"):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+# Topic and Alias Management Commands
+
+@dp.message(Command("topic_id", "thread_id"))
+async def cmd_topic_id(message: Message):
+    chat = message.chat
+    thread_id = message.message_thread_id
+    is_forum = getattr(chat, 'is_forum', False) or (thread_id is not None)
+
+    from src.database import is_topic_monitored
+    is_trips = is_topic_monitored(chat.id, thread_id, "trips")
+
+    status_str = "🟢 Моніториться як 'Виїзди'" if is_trips else "⚪ Не моніториться"
+
+    await message.reply(
+        f"ℹ️ <b>Інформація про гілку/чат:</b>\n\n"
+        f"💬 Чат: <b>{escape_html(chat.title or '')}</b>\n"
+        f"🆔 Chat ID: <code>{chat.id}</code>\n"
+        f"🧵 Thread ID: <code>{thread_id if thread_id is not None else 'Загальний чат (без гілки)'}</code>\n"
+        f"📂 Режим форуму: <b>{'Так' if is_forum else 'Ні'}</b>\n"
+        f"📊 Статус теми: {status_str}",
+        parse_mode="HTML"
+    )
+
+@dp.message(Command("set_trips_topic", "bind_trips", "track_trips"))
+async def cmd_set_trips_topic(message: Message):
+    if not await is_admin(message):
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    thread_id = message.message_thread_id
+    text = (message.text or "").strip()
+    parts = text.split()
+
+    topic_name = "Виїзди"
+
+    if thread_id is None:
+        if len(parts) > 1 and parts[1].isdigit():
+            thread_id = int(parts[1])
+            if len(parts) > 2:
+                topic_name = " ".join(parts[2:])
+        else:
+            await message.reply(
+                "⚠️ <b>Цю команду потрібно викликати всередині гілки (топіка) 'Виїзди'.</b>\n\n"
+                "Перейдіть у потрібну гілку та напишіть <code>/set_trips_topic</code>, "
+                "або вкажіть Thread ID вручну: <code>/set_trips_topic &lt;thread_id&gt;</code>.",
+                parse_mode="HTML"
+            )
+            return
+    else:
+        if len(parts) > 1:
+            topic_name = " ".join(parts[1:])
+
+    from src.database import add_monitored_topic
+    add_monitored_topic(message.chat.id, thread_id, "trips", topic_name)
+
+    await message.reply(
+        f"✅ <b>Гілку успішно підключено до моніторингу виїздів!</b>\n\n"
+        f"📌 Назва: <b>{escape_html(topic_name)}</b>\n"
+        f"🆔 Chat ID: <code>{message.chat.id}</code>\n"
+        f"🧵 Thread ID: <code>{thread_id}</code>\n\n"
+        f"Тепер текстові повідомлення співробітників та волонтерів у цій гілці будуть автоматично аналізуватися AI, "
+        f"а статуси — оновлюватися в системі та відображатися на дашборді.",
+        parse_mode="HTML"
+    )
+
+@dp.message(Command("unset_trips_topic", "unbind_trips"))
+async def cmd_unset_trips_topic(message: Message):
+    if not await is_admin(message):
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    thread_id = message.message_thread_id
+    text = (message.text or "").strip()
+    parts = text.split()
+
+    if thread_id is None:
+        if len(parts) > 1 and parts[1].isdigit():
+            thread_id = int(parts[1])
+        else:
+            await message.reply(
+                "⚠️ Викличте цю команду всередині гілки або вкажіть Thread ID: <code>/unset_trips_topic &lt;thread_id&gt;</code>",
+                parse_mode="HTML"
+            )
+            return
+
+    from src.database import remove_monitored_topic
+    remove_monitored_topic(message.chat.id, thread_id, "trips")
+    await message.reply(f"✅ Моніторинг виїздів для гілки <code>{thread_id}</code> вимкнено.", parse_mode="HTML")
+
+@dp.message(Command("trips_topics", "monitored_topics"))
+async def cmd_trips_topics(message: Message):
+    from src.database import get_monitored_topics
+    topics = get_monitored_topics("trips")
+    env_chat = os.getenv("TRIPS_CHAT_ID")
+    env_thread = os.getenv("TRIPS_THREAD_ID")
+
+    lines = []
+    if topics:
+        for t in topics:
+            lines.append(f"• <b>{escape_html(t.get('topic_name') or 'Виїзди')}</b> — Chat ID: <code>{t['chat_id']}</code>, Thread ID: <code>{t['thread_id']}</code>")
+    if env_chat and env_thread:
+        lines.append(f"• <b>З конфігурації .env</b> — Chat ID: <code>{env_chat}</code>, Thread ID: <code>{env_thread}</code>")
+
+    if not lines:
+        await message.reply(
+            "ℹ️ Наразі немає налаштованих гілок для виїздів.\n\n"
+            "Щоб підключити гілку:\n"
+            "1. Зайдіть у гілку 'Виїзди'\n"
+            "2. Напишіть команду <code>/set_trips_topic</code>",
+            parse_mode="HTML"
+        )
+    else:
+        await message.reply(
+            "📋 <b>Підключені гілки моніторингу виїздів:</b>\n\n" + "\n".join(lines),
+            parse_mode="HTML"
+        )
+
+@dp.message(Command("alias", "aliases", "set_alias"))
+async def cmd_alias(message: Message):
+    if not await is_admin(message):
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    from src.database import get_employee, get_employee_by_username, set_employee_aliases
+
+    target_emp = None
+    aliases_str = ""
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_emp = get_employee(message.reply_to_message.from_user.id)
+        text = (message.text or "").strip()
+        parts = text.split(maxsplit=1)
+        if len(parts) > 1:
+            aliases_str = parts[1].strip()
+    else:
+        text = (message.text or "").strip()
+        parts = text.split(maxsplit=2)
+        if len(parts) > 2:
+            identifier = parts[1].strip()
+            aliases_str = parts[2].strip()
+            if identifier.isdigit():
+                target_emp = get_employee(int(identifier))
+            else:
+                target_emp = get_employee_by_username(identifier)
+
+    if not target_emp or not aliases_str:
+        await message.reply(
+            "ℹ️ <b>Встановлення псевдонімів (аліасів) для співробітника або волонтера</b>\n\n"
+            "Дозволяє AI автоматично зіставляти згадки людей за скороченими іменами чи прізвиськами (наприклад, Сашко, Алекс).\n\n"
+            "<b>Способи використання:</b>\n"
+            "• Відповісти на повідомлення: <code>/alias Сашко, Саша</code>\n"
+            "• За username: <code>/alias @username Сашко, Саша</code>\n"
+            "• За Telegram ID: <code>/alias 123456789 Сашко, Саша</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    set_employee_aliases(target_emp["telegram_id"], aliases_str)
+    name = f"{target_emp['first_name']} {target_emp.get('last_name', '')}".strip()
+    await message.reply(
+        f"✅ Псевдоніми для <b>{escape_html(name)}</b> оновлено:\n<code>{escape_html(aliases_str)}</code>",
+        parse_mode="HTML"
+    )
+
+@dp.message(F.forum_topic_created)
+async def handle_topic_created(message: Message):
+    topic = message.forum_topic_created
+    if not topic or not topic.name:
+        return
+    name_lower = topic.name.lower()
+    if "виїзд" in name_lower:
+        from src.database import add_monitored_topic
+        add_monitored_topic(message.chat.id, message.message_thread_id, "trips", topic.name)
+        await message.reply(
+            f"🚗 Гілку <b>{escape_html(topic.name)}</b> (ID: <code>{message.message_thread_id}</code>) "
+            f"автоматично підключено до моніторингу виїздів та повернень!",
+            parse_mode="HTML"
+        )
+
+@dp.message(F.forum_topic_edited)
+async def handle_topic_edited(message: Message):
+    topic = message.forum_topic_edited
+    if not topic or not topic.name:
+        return
+    name_lower = topic.name.lower()
+    from src.database import add_monitored_topic
+    if "виїзд" in name_lower:
+        add_monitored_topic(message.chat.id, message.message_thread_id, "trips", topic.name)
+
+
 # AI-powered group chat message handler
 
 @dp.message(F.chat.type.in_({"group", "supergroup"}), F.text, ~F.text.startswith("/"))
@@ -463,13 +723,25 @@ async def handle_group_text(message: Message):
     """
     Analyze free-text messages in group chats using AI (Google Gemini)
     to detect status change intents and automatically update employee status.
+    In forum supergroups, only monitors the designated 'Виїзди' (trips) topic.
     """
     user = message.from_user
     if not user or not message.text:
         return
 
-    from src.nlp import analyze_message, format_note, GEMINI_API_KEY
-    if not GEMINI_API_KEY:
+    chat_id = message.chat.id
+    thread_id = message.message_thread_id
+    is_forum = getattr(message.chat, "is_forum", False) or (thread_id is not None)
+
+    from src.database import is_topic_monitored
+    is_trips = is_topic_monitored(chat_id, thread_id, "trips")
+
+    # In a forum supergroup with multiple topics, do NOT process messages outside the monitored trips topic
+    if is_forum and not is_trips:
+        return
+
+    from src.nlp import analyze_message, format_note, get_client
+    if not get_client():
         return  # AI analysis disabled — no API key configured
 
     from src.database import get_current_status, get_valid_actions, record_event
@@ -478,8 +750,18 @@ async def handle_group_text(message: Message):
     current_status = get_current_status(user.id)
     status = current_status.get("status") if current_status else "offline"
 
+    # Check if this message is a reply to another message
+    reply_text = None
+    if message.reply_to_message and message.reply_to_message.text:
+        reply_text = message.reply_to_message.text
+
     # Send message to AI for analysis
-    result = await analyze_message(message.text, status)
+    result = await analyze_message(
+        text=message.text,
+        current_status=status,
+        is_trips_topic=is_trips,
+        reply_text=reply_text,
+    )
     if not result:
         return  # Not a status-related message — ignore silently
 
@@ -488,12 +770,16 @@ async def handle_group_text(message: Message):
     mentioned_users = result.get("mentioned_users", [])
     is_plural = result.get("is_plural", False)
 
-    from src.database import get_all_statuses, upsert_employee
+    from src.database import get_all_statuses, upsert_employee, get_employee
     all_employees = get_all_statuses()
 
-    target_users = []
+    # Check if sender is registered in the employee/volunteer database
+    sender_emp = get_employee(user.id)
 
-    if includes_sender:
+    target_users = []
+    matched_mentions = set()
+
+    if includes_sender and sender_emp:
         target_users.append({
             "id": user.id,
             "first_name": user.first_name,
@@ -502,32 +788,40 @@ async def handle_group_text(message: Message):
         })
 
     if mentioned_users:
-        for emp in all_employees:
-            emp_first = emp.get("first_name", "").lower()
-            emp_last = (emp.get("last_name") or "").lower()
-            emp_username = (emp.get("username") or "").lower()
+        for mention in mentioned_users:
+            m_clean = normalize_name(mention)
+            if len(m_clean) < 2:
+                continue
 
-            emp_aliases = [a.strip().lower() for a in (emp.get("aliases") or "").split(",") if a.strip()]
+            for emp in all_employees:
+                emp_first = normalize_name(emp.get("first_name", ""))
+                emp_last = normalize_name(emp.get("last_name") or "")
+                emp_username = normalize_name(emp.get("username") or "")
+                emp_aliases = [normalize_name(a) for a in (emp.get("aliases") or "").split(",") if a.strip()]
 
-            for mention in mentioned_users:
-                m_lower = mention.lower()
-                # Use length > 2 to avoid matching very short fragments if Gemini returned something weird
-                if len(m_lower) > 2:
-                    match = (m_lower in emp_first or m_lower in emp_last or m_lower in emp_username)
-                    if not match:
-                        for alias in emp_aliases:
-                            if m_lower in alias or alias in m_lower:
-                                match = True
-                                break
-                    if match:
-                        if emp["telegram_id"] not in [u["id"] for u in target_users]:
-                            target_users.append({
-                                "id": emp["telegram_id"],
-                                "first_name": emp["first_name"],
-                                "last_name": emp["last_name"] or "",
-                                "status": emp["status"],
-                            })
-                        break
+                match = False
+                if emp_username and (m_clean == emp_username or m_clean in emp_username):
+                    match = True
+                elif emp_first and (m_clean == emp_first or m_clean in emp_first or emp_first in m_clean):
+                    match = True
+                elif emp_last and (m_clean == emp_last or m_clean in emp_last or emp_last in m_clean):
+                    match = True
+                else:
+                    for alias in emp_aliases:
+                        if m_clean == alias or m_clean in alias or alias in m_clean:
+                            match = True
+                            break
+
+                if match:
+                    if emp["telegram_id"] not in [u["id"] for u in target_users]:
+                        target_users.append({
+                            "id": emp["telegram_id"],
+                            "first_name": emp["first_name"],
+                            "last_name": emp["last_name"] or "",
+                            "status": emp["status"],
+                        })
+                    matched_mentions.add(mention)
+                    break
 
     if is_plural and not mentioned_users:
         sender_note = current_status.get("note") if current_status else ""
@@ -606,6 +900,10 @@ async def handle_group_text(message: Message):
     if note:
         msg += f"\n{note}"
 
+    unmatched = [m for m in mentioned_users if m not in matched_mentions]
+    if unmatched:
+        msg += f"\n<i>ℹ️ Не зареєстровано в системі: {', '.join(escape_html(m) for m in unmatched)}</i>"
+
     await message.reply(msg, parse_mode="HTML")
 
 # Fallback handler for private text messages
@@ -617,3 +915,4 @@ async def fallback_private(message: Message):
         "Використовуйте кнопки на клавіатурі внизу екрана для взаємодії з системою.",
         reply_markup=keyboard,
     )
+
