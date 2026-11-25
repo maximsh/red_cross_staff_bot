@@ -16,6 +16,9 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     WebAppInfo,
+    BotCommand,
+    BotCommandScopeDefault,
+    BotCommandScopeAllGroupChats,
 )
 from aiogram.filters import Command, CommandStart
 
@@ -528,11 +531,38 @@ async def is_admin(message: Message) -> bool:
 
 # Topic and Alias Management Commands
 
+def get_effective_thread_id(message: Message):
+    """Return message_thread_id, mapping the General forum topic (None) to 1."""
+    thread_id = message.message_thread_id
+    if thread_id is None and getattr(message.chat, "is_forum", False):
+        return 1
+    return thread_id
+
+async def register_bot_commands(target_bot: Bot):
+    """Register bot commands for private and group/forum chats."""
+    commands = [
+        BotCommand(command="status", description="Показати хто зараз на роботі"),
+        BotCommand(command="in", description="На місці (початок роботи)"),
+        BotCommand(command="away", description="Виїзд у справах"),
+        BotCommand(command="back", description="Повернення в офіс"),
+        BotCommand(command="out", description="Пішов додому (кінець зміни)"),
+        BotCommand(command="dashboard", description="Відкрити панель контролю"),
+        BotCommand(command="topic_id", description="Показати ID гілки та чату"),
+        BotCommand(command="set_main_topic", description="Прив'язати головну гілку"),
+        BotCommand(command="set_trips_topic", description="Прив'язати гілку 'Виїзди'"),
+        BotCommand(command="monitored_topics", description="Список підключених гілок"),
+        BotCommand(command="add", description="Додати співробітника (відповіддю)"),
+        BotCommand(command="alias", description="Встановити псевдоніми"),
+    ]
+    await target_bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+    await target_bot.set_my_commands(commands, scope=BotCommandScopeAllGroupChats())
+
 @dp.message(Command("topic_id", "thread_id"))
 async def cmd_topic_id(message: Message):
     chat = message.chat
-    thread_id = message.message_thread_id
-    is_forum = getattr(chat, 'is_forum', False) or (thread_id is not None)
+    raw_thread_id = message.message_thread_id
+    is_forum = getattr(chat, 'is_forum', False) or (raw_thread_id is not None)
+    thread_id = get_effective_thread_id(message)
 
     from src.database import is_topic_monitored
     is_trips = is_topic_monitored(chat.id, thread_id, "trips")
@@ -547,11 +577,16 @@ async def cmd_topic_id(message: Message):
     else:
         status_str = "⚪ Не моніториться"
 
+    if thread_id is not None:
+        thread_label = f"<code>{thread_id}</code>" + (" (Загальна гілка)" if is_forum and raw_thread_id is None else "")
+    else:
+        thread_label = "<code>Загальний чат (без гілки)</code>"
+
     await message.reply(
         f"ℹ️ <b>Інформація про гілку/чат:</b>\n\n"
         f"💬 Чат: <b>{escape_html(chat.title or '')}</b>\n"
         f"🆔 Chat ID: <code>{chat.id}</code>\n"
-        f"🧵 Thread ID: <code>{thread_id if thread_id is not None else 'Загальний чат (без гілки)'}</code>\n"
+        f"🧵 Thread ID: {thread_label}\n"
         f"📂 Режим форуму: <b>{'Так' if is_forum else 'Ні'}</b>\n"
         f"📊 Статус теми: {status_str}",
         parse_mode="HTML"
@@ -559,7 +594,7 @@ async def cmd_topic_id(message: Message):
 
 def _extract_topic_params(message: Message, default_name: str):
     """Extract (thread_id, topic_name) from a topic command message."""
-    thread_id = message.message_thread_id
+    thread_id = get_effective_thread_id(message)
     parts = (message.text or "").strip().split()
     topic_name = default_name
 
@@ -794,8 +829,8 @@ async def handle_group_text(message: Message):
         return
 
     chat_id = message.chat.id
-    thread_id = message.message_thread_id
-    is_forum = getattr(message.chat, "is_forum", False) or (thread_id is not None)
+    is_forum = getattr(message.chat, "is_forum", False) or (message.message_thread_id is not None)
+    thread_id = get_effective_thread_id(message)
 
     from src.database import is_topic_monitored, has_monitored_topics
     is_trips = is_topic_monitored(chat_id, thread_id, "trips")

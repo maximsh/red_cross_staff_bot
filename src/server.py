@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from datetime import datetime, timezone
 
 from src.database import init_db
-from src.bot import bot, dp
+from src.bot import bot, dp, register_bot_commands
 from src.api import router as api_router
 
 @asynccontextmanager
@@ -44,10 +44,11 @@ async def lifespan(app: FastAPI):
     )
 
     try:
+        await register_bot_commands(bot)
         bot_info = await bot.get_me()
         print(f"✅ Bot @{bot_info.username} is running")
     except Exception as e:
-        print("⚠️ Failed to fetch bot info on start:", e)
+        print("⚠️ Failed to fetch bot info or register commands on start:", e)
 
     yield
 
