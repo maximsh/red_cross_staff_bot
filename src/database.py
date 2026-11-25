@@ -326,6 +326,24 @@ def get_valid_actions(status: str):
     else:
         return ['checkin', 'field_start']
 
+def set_main_topic(chat_id: int, thread_id: int, topic_name: str = '') -> bool:
+    """Replace any existing main topic for this chat so only one branch is monitored."""
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            conn.execute("""
+                DELETE FROM monitored_topics
+                WHERE chat_id = ? AND topic_type = 'main'
+            """, (chat_id,))
+            conn.execute("""
+                INSERT INTO monitored_topics (chat_id, thread_id, topic_type, topic_name)
+                VALUES (?, ?, 'main', ?)
+            """, (chat_id, thread_id, topic_name or ''))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
 def add_monitored_topic(chat_id: int, thread_id: int, topic_type: str = 'trips', topic_name: str = '') -> bool:
     with db_lock:
         conn = get_db_connection()
@@ -368,10 +386,38 @@ def get_monitored_topics(topic_type: str = None):
         finally:
             conn.close()
 
+def _get_env_topic(topic_type: str):
+    if topic_type == 'trips':
+        return os.getenv("TRIPS_CHAT_ID"), os.getenv("TRIPS_THREAD_ID")
+    if topic_type == 'main':
+        return os.getenv("MAIN_CHAT_ID"), os.getenv("MAIN_THREAD_ID")
+    return None, None
+
+def has_monitored_topics(chat_id: int, topic_type: str = 'main') -> bool:
+    env_chat, env_thread = _get_env_topic(topic_type)
+    if env_chat and env_thread:
+        try:
+            if int(env_chat) == chat_id and env_thread.strip().isdigit():
+                return True
+        except ValueError:
+            pass
+
+    with db_lock:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT 1 FROM monitored_topics
+                WHERE chat_id = ? AND topic_type = ?
+                LIMIT 1
+            """, (chat_id, topic_type))
+            return cur.fetchone() is not None
+        finally:
+            conn.close()
+
 def is_topic_monitored(chat_id: int, thread_id: int = None, topic_type: str = 'trips') -> bool:
     # 1. Check environment variables
-    env_chat = os.getenv("TRIPS_CHAT_ID")
-    env_thread = os.getenv("TRIPS_THREAD_ID")
+    env_chat, env_thread = _get_env_topic(topic_type)
     if env_chat and env_thread:
         try:
             if int(env_chat) == chat_id and (thread_id is not None and int(env_thread) == thread_id):

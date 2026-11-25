@@ -536,8 +536,16 @@ async def cmd_topic_id(message: Message):
 
     from src.database import is_topic_monitored
     is_trips = is_topic_monitored(chat.id, thread_id, "trips")
+    is_main = is_topic_monitored(chat.id, thread_id, "main")
 
-    status_str = "🟢 Моніториться як 'Виїзди'" if is_trips else "⚪ Не моніториться"
+    if is_trips and is_main:
+        status_str = "🟢 Моніториться як головна гілка та 'Виїзди'"
+    elif is_main:
+        status_str = "🟢 Моніториться як головна гілка"
+    elif is_trips:
+        status_str = "🟢 Моніториться як 'Виїзди'"
+    else:
+        status_str = "⚪ Не моніториться"
 
     await message.reply(
         f"ℹ️ <b>Інформація про гілку/чат:</b>\n\n"
@@ -549,34 +557,83 @@ async def cmd_topic_id(message: Message):
         parse_mode="HTML"
     )
 
-@dp.message(Command("set_trips_topic", "bind_trips", "track_trips"))
-async def cmd_set_trips_topic(message: Message):
-    if not await is_admin(message):
-        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
-        return
-
+def _extract_topic_params(message: Message, default_name: str):
+    """Extract (thread_id, topic_name) from a topic command message."""
     thread_id = message.message_thread_id
-    text = (message.text or "").strip()
-    parts = text.split()
-
-    topic_name = "Виїзди"
+    parts = (message.text or "").strip().split()
+    topic_name = default_name
 
     if thread_id is None:
         if len(parts) > 1 and parts[1].isdigit():
             thread_id = int(parts[1])
             if len(parts) > 2:
                 topic_name = " ".join(parts[2:])
-        else:
-            await message.reply(
-                "⚠️ <b>Цю команду потрібно викликати всередині гілки (топіка) 'Виїзди'.</b>\n\n"
-                "Перейдіть у потрібну гілку та напишіть <code>/set_trips_topic</code>, "
-                "або вкажіть Thread ID вручну: <code>/set_trips_topic &lt;thread_id&gt;</code>.",
-                parse_mode="HTML"
-            )
-            return
-    else:
-        if len(parts) > 1:
-            topic_name = " ".join(parts[1:])
+    elif len(parts) > 1:
+        topic_name = " ".join(parts[1:])
+
+    return thread_id, topic_name
+
+@dp.message(Command("set_main_topic", "bind_main", "track_main"))
+async def cmd_set_main_topic(message: Message):
+    if not await is_admin(message):
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    thread_id, topic_name = _extract_topic_params(message, "Головна гілка")
+    if thread_id is None:
+        await message.reply(
+            "⚠️ <b>Цю команду потрібно викликати всередині потрібної гілки головного чату.</b>\n\n"
+            "Перейдіть у потрібну гілку та напишіть <code>/set_main_topic</code>, "
+            "або вкажіть Thread ID вручну: <code>/set_main_topic &lt;thread_id&gt;</code>.",
+            parse_mode="HTML"
+        )
+        return
+
+    from src.database import set_main_topic
+    set_main_topic(message.chat.id, thread_id, topic_name)
+
+    await message.reply(
+        f"✅ <b>Гілку підключено як єдину активну гілку головного чату!</b>\n\n"
+        f"📌 Назва: <b>{escape_html(topic_name)}</b>\n"
+        f"🆔 Chat ID: <code>{message.chat.id}</code>\n"
+        f"🧵 Thread ID: <code>{thread_id}</code>\n\n"
+        f"Тепер у цьому чаті система опрацьовуватиме текстові повідомлення лише з цієї гілки.",
+        parse_mode="HTML"
+    )
+
+@dp.message(Command("unset_main_topic", "unbind_main"))
+async def cmd_unset_main_topic(message: Message):
+    if not await is_admin(message):
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    thread_id, _ = _extract_topic_params(message, "")
+    if thread_id is None:
+        await message.reply(
+            "⚠️ Викличте цю команду всередині гілки або вкажіть Thread ID: <code>/unset_main_topic &lt;thread_id&gt;</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    from src.database import remove_monitored_topic
+    remove_monitored_topic(message.chat.id, thread_id, "main")
+    await message.reply(f"✅ Моніторинг головної гілки <code>{thread_id}</code> вимкнено.", parse_mode="HTML")
+
+@dp.message(Command("set_trips_topic", "bind_trips", "track_trips"))
+async def cmd_set_trips_topic(message: Message):
+    if not await is_admin(message):
+        await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
+        return
+
+    thread_id, topic_name = _extract_topic_params(message, "Виїзди")
+    if thread_id is None:
+        await message.reply(
+            "⚠️ <b>Цю команду потрібно викликати всередині гілки (топіка) 'Виїзди'.</b>\n\n"
+            "Перейдіть у потрібну гілку та напишіть <code>/set_trips_topic</code>, "
+            "або вкажіть Thread ID вручну: <code>/set_trips_topic &lt;thread_id&gt;</code>.",
+            parse_mode="HTML"
+        )
+        return
 
     from src.database import add_monitored_topic
     add_monitored_topic(message.chat.id, thread_id, "trips", topic_name)
@@ -597,49 +654,56 @@ async def cmd_unset_trips_topic(message: Message):
         await message.reply("❌ У вас немає прав адміністратора для цієї дії.")
         return
 
-    thread_id = message.message_thread_id
-    text = (message.text or "").strip()
-    parts = text.split()
-
+    thread_id, _ = _extract_topic_params(message, "")
     if thread_id is None:
-        if len(parts) > 1 and parts[1].isdigit():
-            thread_id = int(parts[1])
-        else:
-            await message.reply(
-                "⚠️ Викличте цю команду всередині гілки або вкажіть Thread ID: <code>/unset_trips_topic &lt;thread_id&gt;</code>",
-                parse_mode="HTML"
-            )
-            return
+        await message.reply(
+            "⚠️ Викличте цю команду всередині гілки або вкажіть Thread ID: <code>/unset_trips_topic &lt;thread_id&gt;</code>",
+            parse_mode="HTML"
+        )
+        return
 
     from src.database import remove_monitored_topic
     remove_monitored_topic(message.chat.id, thread_id, "trips")
     await message.reply(f"✅ Моніторинг виїздів для гілки <code>{thread_id}</code> вимкнено.", parse_mode="HTML")
 
-@dp.message(Command("trips_topics", "monitored_topics"))
+@dp.message(Command("trips_topics", "main_topics", "monitored_topics"))
 async def cmd_trips_topics(message: Message):
     from src.database import get_monitored_topics
-    topics = get_monitored_topics("trips")
-    env_chat = os.getenv("TRIPS_CHAT_ID")
-    env_thread = os.getenv("TRIPS_THREAD_ID")
+    main_topics = get_monitored_topics("main")
+    trips_topics = get_monitored_topics("trips")
+    env_main_chat = os.getenv("MAIN_CHAT_ID")
+    env_main_thread = os.getenv("MAIN_THREAD_ID")
+    env_trips_chat = os.getenv("TRIPS_CHAT_ID")
+    env_trips_thread = os.getenv("TRIPS_THREAD_ID")
 
     lines = []
-    if topics:
-        for t in topics:
+    if main_topics or (env_main_chat and env_main_thread):
+        lines.append("<b>Головні гілки:</b>")
+        for t in main_topics:
+            lines.append(f"• <b>{escape_html(t.get('topic_name') or 'Головна гілка')}</b> — Chat ID: <code>{t['chat_id']}</code>, Thread ID: <code>{t['thread_id']}</code>")
+        if env_main_chat and env_main_thread:
+            lines.append(f"• <b>З конфігурації .env</b> — Chat ID: <code>{env_main_chat}</code>, Thread ID: <code>{env_main_thread}</code>")
+
+    if trips_topics or (env_trips_chat and env_trips_thread):
+        if lines:
+            lines.append("")
+        lines.append("<b>Гілки виїздів:</b>")
+        for t in trips_topics:
             lines.append(f"• <b>{escape_html(t.get('topic_name') or 'Виїзди')}</b> — Chat ID: <code>{t['chat_id']}</code>, Thread ID: <code>{t['thread_id']}</code>")
-    if env_chat and env_thread:
-        lines.append(f"• <b>З конфігурації .env</b> — Chat ID: <code>{env_chat}</code>, Thread ID: <code>{env_thread}</code>")
+        if env_trips_chat and env_trips_thread:
+            lines.append(f"• <b>З конфігурації .env</b> — Chat ID: <code>{env_trips_chat}</code>, Thread ID: <code>{env_trips_thread}</code>")
 
     if not lines:
         await message.reply(
-            "ℹ️ Наразі немає налаштованих гілок для виїздів.\n\n"
+            "ℹ️ Наразі немає налаштованих гілок.\n\n"
             "Щоб підключити гілку:\n"
-            "1. Зайдіть у гілку 'Виїзди'\n"
-            "2. Напишіть команду <code>/set_trips_topic</code>",
+            "• Для головного чату: зайдіть у потрібну гілку та напишіть <code>/set_main_topic</code>\n"
+            "• Для виїздів: зайдіть у гілку 'Виїзди' та напишіть <code>/set_trips_topic</code>",
             parse_mode="HTML"
         )
     else:
         await message.reply(
-            "📋 <b>Підключені гілки моніторингу виїздів:</b>\n\n" + "\n".join(lines),
+            "📋 <b>Підключені гілки моніторингу:</b>\n\n" + "\n".join(lines),
             parse_mode="HTML"
         )
 
@@ -733,11 +797,13 @@ async def handle_group_text(message: Message):
     thread_id = message.message_thread_id
     is_forum = getattr(message.chat, "is_forum", False) or (thread_id is not None)
 
-    from src.database import is_topic_monitored
+    from src.database import is_topic_monitored, has_monitored_topics
     is_trips = is_topic_monitored(chat_id, thread_id, "trips")
+    is_main = is_topic_monitored(chat_id, thread_id, "main")
 
-    # In a forum supergroup with multiple topics, do NOT process messages outside the monitored trips topic
-    if is_forum and not is_trips:
+    # In a forum supergroup (or a chat with configured topics),
+    # do NOT process messages outside the monitored 'trips' or 'main' topic
+    if (is_forum or has_monitored_topics(chat_id, "main") or has_monitored_topics(chat_id, "trips")) and not (is_trips or is_main):
         return
 
     from src.nlp import analyze_message, format_note, get_client
