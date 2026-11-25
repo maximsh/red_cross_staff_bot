@@ -534,7 +534,11 @@ async def is_admin(message: Message) -> bool:
 def get_effective_thread_id(message: Message):
     """Return message_thread_id, mapping the General forum topic (None) to 1."""
     thread_id = message.message_thread_id
-    if thread_id is None and getattr(message.chat, "is_forum", False):
+    # Telegram often omits is_forum in message.chat, so treat any supergroup
+    # message without a thread as coming from the General topic (ID 1).
+    if thread_id is None and (
+        getattr(message.chat, "is_forum", False) or message.chat.type == "supergroup"
+    ):
         return 1
     return thread_id
 
@@ -835,6 +839,8 @@ async def handle_group_text(message: Message):
     from src.database import is_topic_monitored, has_monitored_topics
     is_trips = is_topic_monitored(chat_id, thread_id, "trips")
     is_main = is_topic_monitored(chat_id, thread_id, "main")
+    print(f"[group_text] chat={chat_id} raw_thread={message.message_thread_id} "
+          f"thread={thread_id} is_forum={is_forum} main={is_main} trips={is_trips}")
 
     # In a forum supergroup (or a chat with configured topics),
     # do NOT process messages outside the monitored 'trips' or 'main' topic
